@@ -82,8 +82,38 @@ black bot/ tests/
 
 ## 📝 Dostępne komendy
 
+### Podstawowe
 - `!ping` - Sprawdza czy bot odpowiada i pokazuje latencję
 - `!hello` - Powitanie od bota
+- `!pomoc` - Wyświetla listę wszystkich komend
+
+### Zarządzanie aktywnościami
+- `!typy_aktywnosci` - Wyświetla wszystkie dostępne typy aktywności
+- `!dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]` - Dodaje nową aktywność
+  - Przykład: `!dodaj_aktywnosc bieganie 5.2`
+  - Przykład: `!dodaj_aktywnosc bieganie 10 5` (z 5kg obciążeniem)
+  - Przykład: `!dodaj_aktywnosc bieganie 15 0 200` (z 200m przewyższeniem)
+- `!moja_historia [limit]` - Wyświetla ostatnie aktywności użytkownika
+- `!moje_punkty` - Sprawdza sumę punktów użytkownika
+
+### Rankingi i statystyki
+- `!ranking [limit]` - Ranking użytkowników według punktów
+- `!stats` - Ogólne statystyki serwera
+- `!stats_aktywnosci` - Statystyki według typu aktywności
+
+### Typy aktywności
+Bot wspiera następujące typy aktywności zgodnie z wytycznymi konkursu:
+
+- 🏃 **bieganie_teren** - 1000 pkt/km (min. dystans: BRAK, bonusy: obciążenie, przewyższenie)
+- 🏃‍♂️ **bieganie_bieznia** - 800 pkt/km (min. dystans: BRAK, bonusy: obciążenie)
+- 🏊 **plywanie** - 4000 pkt/km (min. dystans: BRAK, bonusy: brak)
+- 🚴 **rower** - 300 pkt/km (min. dystans: 6km, bonusy: przewyższenie)
+- 🚶 **spacer** - 200 pkt/km (min. dystans: 3km, bonusy: obciążenie, przewyższenie)
+- 🔫 **cardio** - 800 pkt/km (wioślarz, orbitrek, ASG - min. dystans: BRAK, bonusy: obciążenie, przewyższenie)
+
+#### Bonusy punktowe:
+- **Obciążenie**: 10% bazowej wartości za każde 5kg
+- **Przewyższenie**: 5% bazowej wartości za każde 100m
 
 ## 🔧 Rozwój
 
