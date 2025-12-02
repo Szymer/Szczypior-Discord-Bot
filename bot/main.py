@@ -218,7 +218,7 @@ async def sync_chat_history():
                             activity_type=activity_type,
                             distance=distance,
                             weight=weight if weight > 0 else None,
-                            elevation=elevation if elevation > 0 else None,
+                            elevation=elevation if weight > 0 else None,
                             points=points,
                             comment=f"[SYNC] {comment}",
                             timestamp=timestamp,
