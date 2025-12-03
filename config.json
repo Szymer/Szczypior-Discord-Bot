@@ -1,0 +1,36 @@
+{
+    "llm_providers": {
+        "gemini": {
+            "default_model": "models/gemini-1.5-flash",
+            "generation_params": {
+                "temperature": 0.7,
+                "max_tokens": 2048
+            },
+            "prompts": {
+                "activity_analysis": {
+                    "system_prompt": "Przeanalizuj to zdjęcie aktywności sportowej. Wyciągnij następujące informacje i zwróć TYLKO obiekt JSON (bez markdown):\\n{\\n  \"typ_aktywnosci\": \"jeden z [bieganie_teren, bieganie_bieznia, plywanie, rower, spacer, cardio]\",\\n  \"dystans\": float,\\n  \"czas\": \"string lub null\",\\n  \"tempo\": \"string lub null\",\\n  \"obciazenie\": float lub null,\\n  \"przewyzszenie\": float lub null,\\n  \"kalorie\": int lub null,\\n  \"puls_sredni\": int lub null,\\n  \"komentarz\": \"string\"\\n}\\n\\nWAŻNE:\\n- Przeanalizuj dokładnie dane widoczne na zdjęciu (aplikacja Garmin, Strava, itp.)\\n- Jeśli dane nie są widoczne, zwróć null\\n- Dystans ZAWSZE w kilometrach\\n- Bądź precyzyjny - przepisuj dokładne wartości ze zdjęcia\\n- Zwróć TYLKO JSON, bez ```json ani innych formatowań",
+                    "user_prompt_with_context": "Przeanalizuj to zdjęcie aktywności sportowej wraz z kontekstem tekstowym.\\n\\nTekst użytkownika: \"{text_context}\"\\n\\n{system_prompt}"
+                },
+                "motivational_comment": {
+                    "system_prompt": "Napisz krótki (2-4 zdania), motywujący komentarz dla użytkownika.\\n\\nAKTUALNA AKTYWNOŚĆ:\\n- Typ: {activity_type}\\n- Dystans: {distance} km\\n- Punkty: {points}\\n\\nHISTORIA UŻYTKOWNIKA:\\n- Łącznie aktywności: {activity_count}\\n- Łączny dystans: {total_distance:.1f} km\\n- Łączne punkty: {total_points}\\n\\nOstatnie aktywności:\\n{history_text}\\n\\nWYTYCZNE:\\n- Bądź entuzjastyczny i wspierający.\\n- Odnieś się do postępów (jeśli widoczne).\\n- Zachęć do kontynuacji.\\n- Użyj naturalnego, przyjacielskiego języka.\\n- Jeśli to pierwsza aktywność, powitaj i zmotywuj.\\n- Jeśli użytkownik poprawia wyniki, podkreśl to.\\n- Dodaj 2-3 emoji dla lepszego efektu."
+                }
+            }
+        },
+        "anthropic": {
+            "default_model": "claude-3-sonnet-20240229",
+            "generation_params": {
+                "temperature": 0.7,
+                "max_tokens": 2048
+            },
+            "prompts": {}
+        },
+        "openai": {
+            "default_model": "gpt-4-turbo",
+            "generation_params": {
+                "temperature": 0.7,
+                "max_tokens": 2048
+            },
+            "prompts": {}
+        }
+    }
+}

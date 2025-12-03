@@ -1,0 +1,125 @@
+# bot/config_manager.py
+import json
+import os
+from typing import Dict, Any, Optional
+
+class ConfigManager:
+    """
+    Zarządza konfiguracją aplikacji, wczytując ją z pliku JSON
+    i pozwalając na nadpisywanie wartości przez zmienne środowiskowe.
+    Wzorzec Singleton zapewniający jedną instancję w całej aplikacji.
+    """
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(ConfigManager, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self, config_path: str = 'config.json'):
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+        
+        self.config_path = config_path
+        self.config = self._load_config()
+        self._initialized = True
+        print("✅ ConfigManager zainicjalizowany.")
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Wczytuje plik konfiguracyjny JSON."""
+        try:
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            abs_config_path = os.path.join(project_root, self.config_path)
+            
+            with open(abs_config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(f"Plik konfiguracyjny '{abs_config_path}' nie został znaleziony.") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Plik konfiguracyjny '{abs_config_path}' jest niepoprawnym plikiem JSON.") from exc
+
+    def get_llm_provider(self) -> str:
+        """Pobiera nazwę dostawcy LLM ze zmiennych środowiskowych lub zwraca domyślną."""
+        return os.getenv("LLM_PROVIDER", "gemini").lower()
+
+    def get_llm_config(self, provider: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Pobiera pełną konfigurację dla danego dostawcy LLM.
+        Jeśli provider nie jest podany, używa domyślnego.
+        """
+        if provider is None:
+            provider = self.get_llm_provider()
+        return self.config.get("llm_providers", {}).get(provider)
+
+    def get_llm_generation_params(self, provider: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Pobiera parametry generowania dla danego dostawcy,
+        uwzględniając nadpisania ze zmiennych środowiskowych.
+        """
+        if provider is None:
+            provider = self.get_llm_provider()
+            
+        provider_config = self.get_llm_config(provider)
+        if not provider_config:
+            return {}
+
+        params = provider_config.get("generation_params", {})
+        
+        # Nadpisywanie ze zmiennych środowiskowych
+        params['temperature'] = float(os.getenv('LLM_TEMPERATURE', params.get('temperature', 0.7)))
+        params['max_tokens'] = int(os.getenv('LLM_MAX_TOKENS', params.get('max_tokens', 2048)))
+        
+        return params
+
+    def get_prompt(self, prompt_name: str, prompt_type: str = "system_prompt", provider: Optional[str] = None) -> Optional[str]:
+        """
+        Pobiera konkretny szablon promptu dla danego dostawcy.
+        
+        Args:
+            prompt_name: Nazwa promptu (np. 'activity_analysis').
+            prompt_type: Typ promptu (np. 'system_prompt').
+            provider: Nazwa dostawcy (np. 'gemini'). Jeśli None, używa domyślnego.
+            
+        Returns:
+            Szablon promptu jako string lub None.
+        """
+        if provider is None:
+            provider = self.get_llm_provider()
+            
+        provider_config = self.get_llm_config(provider)
+        if not provider_config:
+            return None
+            
+        return provider_config.get("prompts", {}).get(prompt_name, {}).get(prompt_type)
+    
+    def get_llm_prompts(self, provider: Optional[str] = None) -> Dict[str, str]:
+        """
+        Zwraca wszystkie prompty systemowe dla danego dostawcy LLM.
+        
+        Args:
+            provider: Nazwa dostawcy (np. 'gemini'). Jeśli None, używa domyślnego.
+            
+        Returns:
+            Słownik z promptami (np. {'activity_analysis': '...', 'motivational_comment': '...'}).
+        """
+        if provider is None:
+            provider = self.get_llm_provider()
+            
+        provider_config = self.get_llm_config(provider)
+        if not provider_config:
+            return {}
+        
+        prompts_config = provider_config.get("prompts", {})
+        
+        # Wyciągnij system_prompt z każdego promptu
+        simplified_prompts = {}
+        for prompt_name, prompt_data in prompts_config.items():
+            if isinstance(prompt_data, dict) and "system_prompt" in prompt_data:
+                simplified_prompts[prompt_name] = prompt_data["system_prompt"]
+            elif isinstance(prompt_data, str):
+                simplified_prompts[prompt_name] = prompt_data
+        
+        return simplified_prompts
+
+# Utworzenie globalnej instancji, aby była łatwo dostępna w całej aplikacji
+config_manager = ConfigManager()
