@@ -3,61 +3,10 @@ import os
 from typing import Optional, Dict, Any, List
 import discord
 from .config_manager import config_manager
+from .constants import ACTIVITY_TYPES
 
 class BotOrchestrator:
     """Orkiestruje logikę biznesową bota."""
-
-    # Typy aktywności i ich punktacja bazowa (zgodnie z wytycznymi konkursu)
-    ACTIVITY_TYPES = {
-        "bieganie_teren": {
-            "emoji": "🏃", 
-            "base_points": 1000, 
-            "unit": "km",
-            "min_distance": 0,
-            "bonuses": ["obciążenie", "przewyższenie"],
-            "display_name": "Bieganie (Teren)"
-        },
-        "bieganie_bieznia": {
-            "emoji": "🏃‍♂️", 
-            "base_points": 800, 
-            "unit": "km",
-            "min_distance": 0,
-            "bonuses": ["obciążenie"],
-            "display_name": "Bieganie (Bieżnia)"
-        },
-        "plywanie": {
-            "emoji": "🏊", 
-            "base_points": 4000, 
-            "unit": "km",
-            "min_distance": 0,
-            "bonuses": [],
-            "display_name": "Pływanie"
-        },
-        "rower": {
-            "emoji": "🚴", 
-            "base_points": 300, 
-            "unit": "km",
-            "min_distance": 6,
-            "bonuses": ["przewyższenie"],
-            "display_name": "Rower/Rolki"
-        },
-        "spacer": {
-            "emoji": "🚶", 
-            "base_points": 200, 
-            "unit": "km",
-            "min_distance": 3,
-            "bonuses": ["obciążenie", "przewyższenie"],
-            "display_name": "Spacer/Trekking"
-        },
-        "cardio": {
-            "emoji": "🔫", 
-            "base_points": 800, 
-            "unit": "km",
-            "min_distance": 0,
-            "bonuses": ["obciążenie", "przewyższenie"],
-            "display_name": "Inne Cardio (wioślarz, orbitrek, ASG)"
-        },
-    }
 
     def __init__(self, bot, gemini_client, sheets_manager):
         self.bot = bot
@@ -205,7 +154,7 @@ class BotOrchestrator:
     def _create_response_embed(self, message: discord.Message, analysis: Dict[str, Any], points: int, ai_comment: str, saved: bool) -> discord.Embed:
         """Tworzy embed z odpowiedzią dla użytkownika."""
         activity_type = analysis['typ_aktywnosci']
-        info = self.ACTIVITY_TYPES[activity_type]
+        info = ACTIVITY_TYPES[activity_type]
         embed = discord.Embed(
             title=f"{info['emoji']} Automatycznie rozpoznano aktywność!",
             color=discord.Color.green() if saved else discord.Color.orange()
@@ -240,10 +189,10 @@ class BotOrchestrator:
     def calculate_points(self, activity_type: str, distance: float, weight: Optional[float] = None, 
                          elevation: Optional[float] = None) -> tuple[int, str]:
         """Oblicza punkty za aktywność zgodnie z wytycznymi konkursu."""
-        if activity_type not in self.ACTIVITY_TYPES:
+        if activity_type not in ACTIVITY_TYPES:
             return 0, f"Nieznany typ aktywności: {activity_type}"
         
-        activity_info = self.ACTIVITY_TYPES[activity_type]
+        activity_info = ACTIVITY_TYPES[activity_type]
         
         min_distance = activity_info.get("min_distance", 0)
         if distance < min_distance:
