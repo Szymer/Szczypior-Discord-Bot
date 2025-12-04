@@ -6,6 +6,8 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import requests
 import json
+from io import BytesIO
+from PIL import Image
 from .base_client import BaseLLMClient
 
 # Wczytaj zmienne środowiskowe
@@ -78,6 +80,7 @@ class GeminiClient(BaseLLMClient):
     def analyze_image(self, image_url: str, prompt: str) -> Dict[str, Any]:
         """
         Analizuje obraz na podstawie dostarczonego promptu.
+        Używa PIL do wstępnego przetworzenia obrazu.
         
         Args:
             image_url: URL obrazu do analizy.
@@ -88,10 +91,34 @@ class GeminiClient(BaseLLMClient):
         """
         try:
             # Pobierz obraz
-            response = requests.get(image_url)
+            response = requests.get(image_url, timeout=10)
             response.raise_for_status()  # Sprawdź czy pobieranie się udało
-            image_bytes = response.content
-            content_type = response.headers.get('content-type', 'image/jpeg')
+            
+            # Otwórz obraz za pomocą PIL
+            image = Image.open(BytesIO(response.content))
+            
+            # Opcjonalna optymalizacja: zmniejsz rozmiar jeśli obraz jest bardzo duży
+            max_size = (2048, 2048)
+            if image.width > max_size[0] or image.height > max_size[1]:
+                print(f"Zmniejszam obraz z {image.size} do maks. {max_size}")
+                image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            
+            # Konwertuj do RGB jeśli potrzeba (usuwa kanał alpha)
+            if image.mode in ('RGBA', 'LA', 'P'):
+                print(f"Konwertuję obraz z {image.mode} do RGB")
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                background.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+                image = background
+            
+            # Zapisz przetworzone zdjęcie do bajtów
+            buffer = BytesIO()
+            image.save(buffer, format='JPEG', quality=85)
+            image_bytes = buffer.getvalue()
+            content_type = 'image/jpeg'
+            
+            print(f"✅ Przetworzono obraz: rozmiar={len(image_bytes)} bajtów, wymiary={image.size}")
             
             # Przygotuj content dla API
             content = [
@@ -104,19 +131,45 @@ class GeminiClient(BaseLLMClient):
             
             # Wyczyść i sparsuj odpowiedź JSON
             response_text = response.text.strip().replace("```json", "").replace("```", "")
-            return json.loads(response_text)
+            
+            try:
+                parsed_result = json.loads(response_text)
+                
+                # Sprawdź czy Gemini zwrócił informację o braku aktywności
+                if not parsed_result.get('typ_aktywnosci') or not parsed_result.get('dystans'):
+                    print(f"⚠️ Gemini nie wykrył aktywności: {parsed_result.get('komentarz', 'Brak danych')}")
+                    return parsed_result  # Zwróć wynik z null wartościami
+                
+                return parsed_result
+                
+            except json.JSONDecodeError as e:
+                print(f"❌ Błąd parsowania JSON z odpowiedzi Gemini: {e}")
+                print(f"Surowa odpowiedź: {response_text[:500]}")
+                # Zwróć strukturę wskazującą na brak danych zamiast rzucania wyjątku
+                return {
+                    "typ_aktywnosci": None,
+                    "dystans": None,
+                    "komentarz": "Błąd analizy obrazu - nie udało się przetworzyć odpowiedzi"
+                }
             
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Błąd pobierania obrazu z URL: {e}")
-        except json.JSONDecodeError as e:
-            raise Exception(f"Błąd parsowania JSON z odpowiedzi Gemini: {e}\nOdpowiedź: {response.text}")
+            print(f"❌ Błąd pobierania obrazu z URL: {e}")
+            return {
+                "typ_aktywnosci": None,
+                "dystans": None,
+                "komentarz": "Błąd pobierania obrazu"
+            }
         except Exception as e:
-            print(f"Błąd API Gemini (analyze_image): {e}")
+            print(f"❌ Błąd API Gemini (analyze_image): {e}")
             try:
                 print(f"Prompt feedback: {response.prompt_feedback}")
             except:
                 pass
-            raise Exception(f"Błąd analizy obrazu: {e}")
+            return {
+                "typ_aktywnosci": None,
+                "dystans": None,
+                "komentarz": "Błąd analizy obrazu"
+            }
 
     def get_model_info(self) -> Dict[str, Any]:
         """Zwraca informacje o używanym modelu."""

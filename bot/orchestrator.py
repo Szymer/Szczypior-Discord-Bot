@@ -13,6 +13,38 @@ class BotOrchestrator:
         self.gemini_client = gemini_client
         self.sheets_manager = sheets_manager
 
+    def _create_unique_id(self, message: discord.Message) -> str:
+        """
+        Tworzy unikalny ID dla wiadomości Discord.
+        
+        Args:
+            message: Wiadomość Discord
+            
+        Returns:
+            Unikalny ID w formacie: {timestamp}_{message_id}
+        """
+        return f"{message.created_at.timestamp()}_{message.id}"
+    
+    def _activity_already_exists(self, message: discord.Message, analysis: Dict[str, Any] = None) -> bool:
+        """
+        Sprawdza czy aktywność z danej wiadomości już istnieje w arkuszu.
+        
+        Args:
+            message: Wiadomość Discord
+            analysis: Analiza aktywności (jeśli dostępna)
+            
+        Returns:
+            True jeśli aktywność już istnieje, False w przeciwnym razie
+        """
+        if not self.sheets_manager:
+            return False
+        
+        # Używamy IID (message_timestamp_message_id) do sprawdzania duplikatów
+        message_id = str(message.id)
+        message_timestamp = str(int(message.created_at.timestamp()))
+        
+        return self.sheets_manager.activity_exists(message_id, message_timestamp)
+
     async def handle_message(self, message: discord.Message):
         """Przetwarza wiadomość i decyduje o podjęciu akcji."""
         # Ignoruj własne wiadomości i komendy
@@ -31,13 +63,46 @@ class BotOrchestrator:
                 await message.remove_reaction('🤔', self.bot.user)
                 return
 
+            # Pobierz historię użytkownika dla kontekstu
+            user_history_text = ""
+            if self.sheets_manager:
+                display_name = message.author.global_name if message.author.global_name else str(message.author)
+                user_activities = self.sheets_manager.get_user_history(display_name)
+                if user_activities:
+                    recent = user_activities[-5:]  # Ostatnie 5 aktywności
+                    history_lines = []
+                    for act in recent:
+                        dist = act.get('Dystans (km)', '0')
+                        # Dystans jest już stringiem z przecinkiem (format Polski), używamy go bezpośrednio
+                        history_lines.append(
+                            f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} {dist}km, {act.get('PUNKTY', '0')} pkt"
+                        )
+                    user_history_text = "\n".join(history_lines)
+
             # Analiza obrazu przez Gemini
-            analysis = self._analyze_image_with_gemini(image_url, message.content)
+            analysis = self._analyze_image_with_gemini(image_url, message.content, user_history_text)
 
             if analysis and analysis.get('typ_aktywnosci') and analysis.get('dystans'):
+                # Sprawdź czy aktywność już została dodana (duplikat)
+                if self._activity_already_exists(message, analysis):
+                    print(f"⚠️ Aktywność z wiadomości {message.id} już istnieje w arkuszu - pomijam")
+                    await message.remove_reaction('🤔', self.bot.user)
+                    await message.add_reaction('✅')  # Już dodane
+                    return
+                
                 await self._process_successful_analysis(message, analysis)
             else:
+                # Zdjęcie nie zawiera danych o aktywności
                 await message.remove_reaction('🤔', self.bot.user)
+                await message.add_reaction('❓')
+                
+                # Opcjonalnie wyślij krótką wiadomość
+                await message.reply(
+                    "❓ Nie mogłem rozpoznać danych o aktywności na tym zdjęciu. "
+                    "Upewnij się, że zdjęcie zawiera wyraźne informacje o dystansie i typie aktywności.",
+                    delete_after=30  # Usuń po 30 sekundach
+                )
+                print(f"⚠️ Brak danych o aktywności w analizie zdjęcia od {message.author}")
 
         except Exception as e:
             print(f"Błąd analizy wiadomości w orchestratorze: {e}")
@@ -52,18 +117,14 @@ class BotOrchestrator:
         if not message.attachments:
             return False
 
+        # Sprawdź czy jest obrazek (nie GIF)
         has_image = any(
             att.content_type and att.content_type.startswith('image/') and att.content_type != 'image/gif'
             for att in message.attachments
         )
-        if not has_image:
-            return False
-
-        keywords = ['bieg', 'rower', 'pływa', 'spacer', 'trening', 'km', 'kilometr']
-        has_keywords = any(keyword in message.content.lower() for keyword in keywords) if message.content else False
-
-        # Analizuj jeśli jest obraz i (brak tekstu LUB tekst zawiera słowa kluczowe)
-        return not message.content or has_keywords
+        
+        # Analizuj każde zdjęcie - Gemini sam zadecyduje czy to aktywność
+        return has_image
 
     def _get_image_url(self, message: discord.Message) -> Optional[str]:
         """Zwraca URL pierwszego obrazu z wiadomości (nie-GIF)."""
@@ -72,9 +133,9 @@ class BotOrchestrator:
                 return attachment.url
         return None
 
-    def _analyze_image_with_gemini(self, image_url: str, text_context: Optional[str]) -> Dict[str, Any]:
+    def _analyze_image_with_gemini(self, image_url: str, text_context: Optional[str], user_history: Optional[str] = None) -> Dict[str, Any]:
         """Tworzy prompt i wywołuje analizę obrazu w LLM Client."""
-        prompt = self._build_activity_analysis_prompt(text_context)
+        prompt = self._build_activity_analysis_prompt(text_context, user_history)
         return self.gemini_client.analyze_image(image_url, prompt)
 
     async def _process_successful_analysis(self, message: discord.Message, analysis: Dict[str, Any]):
@@ -112,7 +173,8 @@ class BotOrchestrator:
         user_history = []
         if self.sheets_manager:
             try:
-                user_history = self.sheets_manager.get_user_history(str(author))
+                display_name = author.global_name if author.global_name else str(author)
+                user_history = self.sheets_manager.get_user_history(display_name)
             except Exception as e:
                 print(f"Nie udało się pobrać historii użytkownika {author}: {e}")
 
@@ -131,21 +193,35 @@ class BotOrchestrator:
             return "Dobra robota!" # Fallback
 
     def _save_activity_to_sheets(self, message: discord.Message, analysis: Dict[str, Any], points: int, ai_comment: str) -> bool:
-        """Zapisuje aktywność do Google Sheets."""
+        """
+        Zapisuje aktywność do Google Sheets.
+        
+        Args:
+            message: Wiadomość Discord
+            analysis: Analiza aktywności
+            points: Punkty za aktywność (nie używane - punkty obliczane przez arkusz)
+            ai_comment: Komentarz AI (nie zapisywany do arkusza)
+        """
         if not self.sheets_manager:
             return False
         try:
             timestamp = message.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Określ czy jest obciążenie > 5kg
+            weight_value = float(analysis.get('obciazenie') or 0)
+            has_weight = weight_value > 5
+            
+            # Użyj global_name jeśli dostępne, w przeciwnym razie username
+            display_name = message.author.global_name if message.author.global_name else str(message.author)
+            
             return self.sheets_manager.add_activity(
-                username=str(message.author),
+                username=display_name,
                 activity_type=analysis['typ_aktywnosci'],
                 distance=float(analysis['dystans']),
-                weight=float(analysis.get('obciazenie') or 0) or None,
-                elevation=float(analysis.get('przewyzszenie') or 0) or None,
-                points=points,
-                comment=ai_comment, # Zapisujemy komentarz AI
+                has_weight=has_weight,
                 timestamp=timestamp,
-                message_id=str(message.id)
+                message_id=str(message.id),
+                message_timestamp=str(int(message.created_at.timestamp()))
             )
         except Exception as e:
             print(f"Błąd zapisu do Sheets w orchestratorze: {e}")
@@ -231,14 +307,11 @@ class BotOrchestrator:
             
             print(f"🔄 Rozpoczynam synchronizację historii czatu dla kanału: {channel.name}")
             
-            existing_message_ids = self.sheets_manager.get_all_message_ids()
-            print(f"📋 Znaleziono {len(existing_message_ids)} aktywności w arkuszu")
-            
-            processed, added, skipped = 0, 0, 0
+            processed, added, skipped, not_recognized = 0, 0, 0, 0
             
             async for message in channel.history(limit=100):
-                if message.author == self.bot.user or str(message.id) in existing_message_ids:
-                    if str(message.id) in existing_message_ids: skipped += 1
+                # Pomiń wiadomości od bota
+                if message.author == self.bot.user:
                     continue
                 
                 if not self._is_message_eligible_for_analysis(message):
@@ -249,9 +322,15 @@ class BotOrchestrator:
                     image_url = self._get_image_url(message)
                     if not image_url: continue
 
-                    analysis = self._analyze_image_with_gemini(image_url, message.content)
+                    # Dla synchronizacji nie przekazujemy historii (oszczędność tokenów)
+                    analysis = self._analyze_image_with_gemini(image_url, message.content, None)
                     
                     if analysis and analysis.get('typ_aktywnosci') and analysis.get('dystans'):
+                        # Sprawdź czy aktywność już istnieje w arkuszu
+                        if self._activity_already_exists(message, analysis):
+                            skipped += 1
+                            continue
+                        
                         points, error_msg = self.calculate_points(
                             analysis['typ_aktywnosci'], float(analysis['dystans']),
                             float(analysis.get('obciazenie') or 0) or None,
@@ -263,24 +342,39 @@ class BotOrchestrator:
                             if saved:
                                 added += 1
                                 print(f"  ✅ Dodano z synchronizacji: {analysis['typ_aktywnosci']} {analysis['dystans']}km ({points} pkt)")
+                    else:
+                        # Nie rozpoznano aktywności
+                        not_recognized += 1
+                        print(f"  ⚠️ Nie rozpoznano aktywności w wiadomości {message.id}: {analysis.get('komentarz', 'Brak danych')}")
                 
                 except Exception as e:
                     print(f"  ⚠️ Błąd analizy wiadomości podczas synchronizacji: {e}")
             
-            print(f"\n✅ Synchronizacja zakończona! Przeanalizowano: {processed}, Dodano: {added}, Pominięto: {skipped}")
+            print(f"\n✅ Synchronizacja zakończona!")
+            print(f"   📊 Przeanalizowano: {processed}")
+            print(f"   ➕ Dodano: {added}")
+            print(f"   ⏭️ Pominięto (już istnieją): {skipped}")
+            print(f"   ❓ Nie rozpoznano: {not_recognized}")
             
         except Exception as e:
             print(f"❌ Krytyczny błąd synchronizacji: {e}")
 
-    def _build_activity_analysis_prompt(self, text_context: Optional[str]) -> str:
-        """Buduje prompt do analizy aktywności na podstawie obrazu i tekstu."""
+    def _build_activity_analysis_prompt(self, text_context: Optional[str], user_history: Optional[str] = None) -> str:
+        """Buduje prompt do analizy aktywności na podstawie obrazu, tekstu i historii użytkownika."""
         # Pobierz prompt z konfiguracji
         provider = config_manager.get_llm_provider()
         prompts = config_manager.get_llm_prompts(provider)
         
-        base_prompt = prompts.get("activity_analysis", """Przeanalizuj to zdjęcie aktywności sportowej.
+        base_prompt = prompts.get("activity_analysis", """Przeanalizuj to zdjęcie i sprawdź czy zawiera dane o aktywności sportowej.
 
-Wyciągnij następujące informacje i zwróć TYLKO obiekt JSON (bez markdown):
+Jeśli zdjęcie NIE ZAWIERA danych o aktywności sportowej (aplikacja fitness, zrzut ekranu treningowy itp.), zwróć:
+{
+  "typ_aktywnosci": null,
+  "dystans": null,
+  "komentarz": "Nie wykryto danych o aktywności sportowej na zdjęciu"
+}
+
+Jeśli zdjęcie ZAWIERA dane o aktywności, wyciągnij następujące informacje i zwróć TYLKO obiekt JSON (bez markdown):
 {
   "typ_aktywnosci": "jeden z [bieganie_teren, bieganie_bieznia, plywanie, rower, spacer, cardio]",
   "dystans": float,
@@ -294,18 +388,19 @@ Wyciągnij następujące informacje i zwróć TYLKO obiekt JSON (bez markdown):
 }
 
 WAŻNE:
-- Przeanalizuj dokładnie dane widoczne na zdjęciu (aplikacja Garmin, Strava, itp.)
-- Jeśli dane nie są widoczne, zwróć null
+- Przeanalizuj dokładnie dane widoczne na zdjęciu (aplikacja Garmin, Strava, Endomondo itp.)
+- Jeśli konkretne dane nie są widoczne, zwróć null dla tego pola
 - Dystans ZAWSZE w kilometrach
 - Bądź precyzyjny - przepisuj dokładne wartości ze zdjęcia
 - Zwróć TYLKO JSON, bez ```json ani innych formatowań""")
 
         if text_context:
-            return f"""Przeanalizuj to zdjęcie aktywności sportowej wraz z kontekstem tekstowym.
-
-Tekst użytkownika: "{text_context}"
-
-{base_prompt}"""
+            user_prompt = prompts.get("user_prompt_with_context", "{system_prompt}")
+            return user_prompt.format(
+                text_context=text_context or "",
+                user_history=user_history or "Brak wcześniejszych aktywności.",
+                system_prompt=base_prompt
+            )
         return base_prompt
 
     def _build_motivational_comment_prompt(self, current_activity: Dict[str, Any], previous_activities: List[Dict[str, Any]]) -> str:
@@ -313,13 +408,36 @@ Tekst użytkownika: "{text_context}"
         # Przygotuj kontekst historii
         if previous_activities:
             recent = previous_activities[-5:]
-            history_summary = [
-                f"- {act.get('Aktywność', 'N/A')}: {act.get('Dystans (km)', 0)} km, {act.get('Punkty', 0)} pkt (Data: {act.get('Data', 'N/A')})"
-                for act in recent
-            ]
+            history_summary = []
+            for act in recent:
+                # Konwertuj dystans na float dla wyświetlenia
+                dist = act.get('Dystans (km)', 0)
+                try:
+                    if isinstance(dist, str):
+                        dist_float = float(dist.replace(',', '.'))
+                    else:
+                        dist_float = float(dist)
+                except (ValueError, AttributeError):
+                    dist_float = 0
+                
+                history_summary.append(
+                    f"- {act.get('Rodzaj Aktywności', 'N/A')}: {dist_float} km, {act.get('PUNKTY', 0)} pkt (Data: {act.get('Data', 'N/A')})"
+                )
             history_text = "\n".join(history_summary)
-            total_distance = sum(float(act.get('Dystans (km)', 0)) for act in previous_activities)
-            total_points = sum(int(act.get('Punkty', 0)) for act in previous_activities)
+            # Konwertuj dystans na float, obsługując przecinki i stringi
+            distances = []
+            for act in previous_activities:
+                dist = act.get('Dystans (km)', 0)
+                try:
+                    if isinstance(dist, str):
+                        dist = float(dist.replace(',', '.'))
+                    else:
+                        dist = float(dist)
+                    distances.append(dist)
+                except (ValueError, AttributeError):
+                    distances.append(0)
+            total_distance = sum(distances)
+            total_points = sum(int(act.get('PUNKTY', 0)) for act in previous_activities)
             activity_count = len(previous_activities)
         else:
             history_text = "To pierwsza zarejestrowana aktywność!"

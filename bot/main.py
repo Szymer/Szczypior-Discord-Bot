@@ -163,14 +163,17 @@ async def add_activity(ctx, activity_type: str, distance: float,
     
     if sheets_manager:
         try:
+            # Określ czy jest obciążenie > 5kg
+            has_weight = weight is not None and weight > 5
+            
             saved = sheets_manager.add_activity(
                 username=username,
                 activity_type=activity_type,
                 distance=distance,
-                weight=weight,
-                elevation=elevation,
-                points=points,
-                comment=""
+                has_weight=has_weight,
+                timestamp=None,
+                message_id=str(ctx.message.id),
+                message_timestamp=str(ctx.message.created_at.timestamp())
             )
         except Exception as e:
             print(f"Błąd zapisu do Sheets: {e}")
