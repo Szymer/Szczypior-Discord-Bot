@@ -320,7 +320,16 @@ class SheetsManager:
             Suma punktów
         """
         history = self.get_user_history(username)
-        total = sum(record.get("Punkty", 0) for record in history)
+        total = 0
+        for record in history:
+            # Spróbuj z różnymi wariantami nazwy kolumny
+            points_value = record.get("PUNKTY") or record.get("Punkty") or record.get("punkty") or 0
+            # Konwertuj na int (wartość może być string z arkusza)
+            try:
+                total += int(float(points_value)) if points_value else 0
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid points value: {points_value}")
+                continue
         return total
 
     def setup_headers(self):
