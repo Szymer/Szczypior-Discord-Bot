@@ -362,8 +362,30 @@ class BotOrchestrator:
         self, image_url: str, text_context: Optional[str], user_history: Optional[str] = None
     ) -> Dict[str, Any]:
         """Tworzy prompt i wywołuje analizę obrazu w LLM Client."""
-        prompt = self._build_activity_analysis_prompt(text_context, user_history)
-        return self.gemini_client.analyze_image(image_url, prompt)
+        # Pobierz prompty z konfiguracji
+        provider = config_manager.get_llm_provider()
+        prompts = config_manager.get_llm_prompts(provider)
+        
+        activity_analysis = prompts.get("activity_analysis", {})
+        system_prompt = activity_analysis.get("system_prompt")
+        
+        # Buduj user prompt z kontekstem
+        if text_context:
+            user_prompt_template = activity_analysis.get("user_prompt_with_context", "{system_prompt}")
+            user_prompt = user_prompt_template.format(
+                text_context=text_context or "",
+                user_history=user_history or "Brak wcześniejszych aktywności.",
+                system_prompt="" # system_prompt będzie w system_instruction
+            )
+        else:
+            user_prompt = ""  # Tylko system_instruction
+        
+        # Wywołaj analyze_image z system_instruction
+        return self.gemini_client.analyze_image(
+            image_url, 
+            user_prompt if user_prompt else "Przeanalizuj to zdjęcie aktywności sportowej.",
+            system_instruction=system_prompt
+        )
 
     async def _process_successful_analysis(
         self, message: discord.Message, analysis: Dict[str, Any]

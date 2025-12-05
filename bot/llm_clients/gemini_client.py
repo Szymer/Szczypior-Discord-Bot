@@ -45,14 +45,34 @@ class GeminiClient(BaseLLMClient):
         if not self.model_name:
             self.model_name = "gemini-1.5-flash"
 
-        self.model = genai.GenerativeModel(self.model_name)
-        self.vision_model = genai.GenerativeModel(self.model_name)
-
         # Zapisz parametry generowania
         self.generation_params = generation_params or {}
+        
+        # Model będzie tworzony dynamicznie z system_instruction w metodach
+
+    def _create_model(self, system_instruction: Optional[str] = None) -> genai.GenerativeModel:
+        """
+        Tworzy instancję modelu z opcjonalną instrukcją systemową.
+        
+        Args:
+            system_instruction: Instrukcja systemowa dla modelu
+            
+        Returns:
+            Instancja GenerativeModel
+        """
+        if system_instruction:
+            return genai.GenerativeModel(
+                self.model_name,
+                system_instruction=system_instruction
+            )
+        return genai.GenerativeModel(self.model_name)
 
     def generate_text(
-        self, prompt: str, temperature: Optional[float] = None, max_tokens: Optional[int] = None
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None, 
+        max_tokens: Optional[int] = None,
+        system_instruction: Optional[str] = None
     ) -> str:
         """
         Generuje tekst na podstawie promptu.
@@ -61,11 +81,15 @@ class GeminiClient(BaseLLMClient):
             prompt: Prompt dla modelu.
             temperature: Temperatura generowania (0.0-1.0). Jeśli None, użyje wartości z konfiguracji.
             max_tokens: Maksymalna liczba tokenów (opcjonalne). Jeśli None, użyje wartości z konfiguracji.
+            system_instruction: Instrukcja systemowa dla modelu (opcjonalne).
 
         Returns:
             Wygenerowany tekst.
         """
         try:
+            # Utwórz model z system_instruction jeśli podano
+            model = self._create_model(system_instruction)
+            
             # Użyj wartości z argumentów lub z konfiguracji
             generation_config = {
                 "temperature": (
@@ -83,7 +107,7 @@ class GeminiClient(BaseLLMClient):
             if tokens:
                 generation_config["max_output_tokens"] = tokens
 
-            response = self.model.generate_content(prompt, generation_config=generation_config)
+            response = model.generate_content(prompt, generation_config=generation_config)
             return response.text
         except Exception as e:
             print(f"Błąd API Gemini (generate_text): {e}")
@@ -93,7 +117,7 @@ class GeminiClient(BaseLLMClient):
                 pass
             raise Exception(f"Błąd generowania tekstu: {e}")
 
-    def analyze_image(self, image_url: str, prompt: str) -> Dict[str, Any]:
+    def analyze_image(self, image_url: str, prompt: str, system_instruction: Optional[str] = None) -> Dict[str, Any]:
         """
         Analizuje obraz na podstawie dostarczonego promptu.
         Używa PIL do wstępnego przetworzenia obrazu.
@@ -101,11 +125,15 @@ class GeminiClient(BaseLLMClient):
         Args:
             image_url: URL obrazu do analizy.
             prompt: Prompt zawierający instrukcje dla modelu.
+            system_instruction: Instrukcja systemowa dla modelu (opcjonalne).
 
         Returns:
             Słownik z przeanalizowanymi danymi (wynik parsowania JSON).
         """
         try:
+            # Utwórz model vision z system_instruction jeśli podano
+            vision_model = self._create_model(system_instruction)
+            
             # Pobierz obraz
             response = requests.get(image_url, timeout=10)
             response.raise_for_status()  # Sprawdź czy pobieranie się udało
@@ -142,7 +170,7 @@ class GeminiClient(BaseLLMClient):
             content = [prompt, {"mime_type": content_type, "data": image_bytes}]
 
             # Wyślij do Gemini
-            response = self.vision_model.generate_content(content)
+            response = vision_model.generate_content(content)
 
             # Wyczyść i sparsuj odpowiedź JSON
             response_text = response.text.strip().replace("```json", "").replace("```", "")
@@ -184,8 +212,8 @@ class GeminiClient(BaseLLMClient):
         """Zwraca informacje o używanym modelu."""
         return {
             "model_name": self.model_name,
-            "vision_model_name": self.vision_model.model_name,
             "credentials_type": "API Key",
+            "supports_system_instruction": True,
         }
 
     def list_available_models(self):
