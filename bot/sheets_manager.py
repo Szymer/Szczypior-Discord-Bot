@@ -32,6 +32,11 @@ class SheetsManager:
             service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT")
             
             if service_account_json:
+                # Usuń BOM jeśli istnieje
+                if service_account_json.startswith('\ufeff'):
+                    service_account_json = service_account_json[1:]
+                    logger.info("Removed BOM from GOOGLE_SERVICE_ACCOUNT")
+                
                 # Użyj Service Account z zmiennej środowiskowej
                 service_account_info = json.loads(service_account_json)
                 creds = Credentials.from_service_account_info(
