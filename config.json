@@ -1,0 +1,74 @@
+{
+    "activity_keywords": {
+        "bieganie_teren": [
+            "bieg", "biegu", "bieganie", "bieganiu", "biegałem", "biegałam", "biegł", "biegła",
+            "running", "run", "ran", "jogging", "jog",
+            "trail", "trailrunning", "trail running",
+            "teren", "terenowy", "terenowe", "terenówka",
+            "biegnąłem", "biegnąłam", "biegną", "pobiegać", "pobiegałem", "pobiegałam"
+        ],
+        "bieganie_bieznia": [
+            "bieżnia", "bieżni", "bieznia", "biezni", "bieżnią", "bieznią",
+            "treadmill", "indoor running", "indoor run"
+        ],
+        "plywanie": [
+            "pływanie", "pływaniu", "pływał", "pływała", "pływałem", "pływałam",
+            "plywanie", "plywaniu", "plywal", "plywala", "plywalem", "plywalam",
+            "swimming", "swim", "swam", "pool", "basen", "basenie", "basenu",
+            "open water", "openwater", "zalew", "jezioro", "morze"
+        ],
+        "rower": [
+            "rower", "roweru", "rowerem", "rowerze", "rowerowy", "rowerowa",
+            "cycling", "cycle", "bike", "biking", "bicycle",
+            "rolki", "rolkach", "rolkami", "roller", "skating", "inline"
+        ],
+        "spacer": [
+            "spacer", "spaceru", "spacerem", "spacerze", "spacerowanie", "spacerował",
+            "walking", "walk", "walked", "chodzenie", "chodzeniu", "chodził", "chodziła",
+            "hiking", "hike", "hiked", "trekking", "trek",
+            "marsz", "marszobieg", "nordic walking", "kije"
+        ],
+        "cardio": [
+            "cardio", "kardio", "siłownia", "silownia", "gym", "fitness",
+            "rowing", "wioślarz", "wioslarz", "rower stacjonarny",
+            "elliptical", "orbitrek", "eliptyczny",
+            "soccer", "football", "piłka", "pilka", "nożna", "nozna",
+            "crossfit", "cross fit", "trening", "workout", "ćwiczenia", "cwiczenia",
+            "aerobik", "zumba", "spinning", "step", "boks", "walka"
+        ]
+    },
+    "llm_providers": {
+        "gemini": {
+            "default_model": "models/gemini-2.5-flash-lite",
+            "generation_params": {
+                "temperature": 0.7,
+                "max_tokens": 2048
+            },
+            "prompts": {
+                "activity_analysis": {
+                    "system_prompt": "Przeanalizuj to zdjęcie i sprawdź czy zawiera dane o aktywności sportowej.\\n\\nJeśli zdjęcie NIE ZAWIERA danych o aktywności sportowej (nie jest to aplikacja fitness, zrzut ekranu treningowy itp.), zwróć:\\n{\\n  \"typ_aktywnosci\": null,\\n  \"dystans\": null,\\n  \"czas\": null,\\n  \"komentarz\": \"Nie wykryto danych o aktywności sportowej na zdjęciu\"\\n}\\n\\nJeśli zdjęcie ZAWIERA dane o aktywności sportowej, wyciągnij następujące informacje i zwróć TYLKO obiekt JSON (bez markdown):\\n{\\n  \"typ_aktywnosci\": \"jeden z [bieganie_teren, bieganie_bieznia, plywanie, rower, spacer, cardio]\" jeżeli aktywności nie jest nazwana w jasny sposób sprobój rozpoznac na podstawie pictogramu ,\\n  \"dystans\": float lub null,\\n  \"czas\": \"HH:MM:SS lub MM:SS\",\\n  \"tempo\": \"string lub null\",\\n  \"obciazenie\": float lub null,\\n  \"przewyzszenie\": float lub null,\\n  \"kalorie\": int lub null,\\n  \"puls_sredni\": int lub null,\\n  \"komentarz\": \"opis aktywności\"\\n}\\n\\nMAPOWANIE TYPÓW (rozpoznaj ze zdjęcia i zwróć odpowiednią wartość):\\n- Running/Trail Running → bieganie_teren\\n- Running/Treadmill → bieganie_bieznia\\n- Swimming/Pool/Open Water → plywanie\\n- Cycling/Bike/Biking → rower\\n- Walking/Hiking/Trekking → spacer\\n- Soccer/Football/Gym/Fitness/Cardio/Rowing/Elliptical/Other → cardio\\n\\n⚠️ WAŻNE ZASADY:\\n1. Przeanalizuj dokładnie dane widoczne na zdjęciu (Garmin, Strava, Endomondo, itp.)\\n2. Zdjęcia mogą być w języku angielskim - rozpoznaj typ i zwróć polską wartość\\n3. **DYSTANS**: Jeśli jest widoczny dystans, zwróć go w kilometrach (konwertuj z mil jeśli trzeba)\\n4. **CZAS**: ZAWSZE wyciągnij czas jeśli jest widoczny (format HH:MM:SS lub MM:SS)\\n5. Jeśli NIE MA dystansu ALE JEST czas aktywności - to też jest WAŻNA aktywność! Zwróć czas w polu 'czas'\\n6. Dla aktywności bez dystansu (soccer, gym, itp.) - zwróć czas i typ 'cardio'\\n7. Przewyższenie ZAWSZE w metrach (konwertuj z feet jeśli potrzeba)\\n8. Bądź precyzyjny - przepisuj dokładne wartości ze zdjęcia\\n9. W komentarzu opisz krótko co widzisz na zdjęciu\\n10. Zwróć TYLKO JSON, bez ```json ani innych formatowań" ,
+                    "user_prompt_with_context": "TEKST UŻYTKOWNIKA: \"{text_context}\"\n\nHISTORIA UŻYTKOWNIKA (ostatnie aktywności):\n{user_history}\n\n⚠️ WAŻNE - WYKRYWANIE OBCIĄŻENIA:\nSzukaj w tekście użytkownika DOWOLNEJ wzmianki o obciążeniu, wadze, plecaku, kamizelce obciążeniowej. Przykłady:\n- \"obciążenie 10 kg\" → obciazenie: 10\n- \"obciązenie 5 kg\" (z błędem ortograficznym) → obciazenie: 5\n- \"5kg\" → obciazenie: 5\n- \"plecak 8 kg\" → obciazenie: 8\n- \"kamizelka 12kg\" → obciazenie: 12\n- \"weight 15kg\" → obciazenie: 15\n- \"z 6 kg\" → obciazenie: 6\n\nWYCIĄGNIJ LICZBĘ z DOWOLNEGO zapisu dotyczącego obciążenia. Jeśli obciążenie >= 5 kg, to jest WAŻNE dla punktacji!\n\nJeśli w tekście nie ma informacji o obciążeniu, sprawdź zdjęcie. Jeśli ani tekst ani zdjęcie nie mają informacji, zwróć null.\n\n{system_prompt}"
+                },
+                "motivational_comment": {
+                    "system_prompt": "Napisz krótki (2-4 zdania), motywujący komentarz dla użytkownika.\\n\\nAKTUALNA AKTYWNOŚĆ:\\n- Typ: {activity_type}\\n- Dystans: {distance} km\\n- Punkty: {points}\\n\\nHISTORIA UŻYTKOWNIKA:\\n- Łącznie aktywności: {activity_count}\\n- Łączny dystans: {total_distance} km\\n- Łączne punkty: {total_points}\\n\\nOstatnie aktywności:\\n{history_text}\\n\\nWYTYCZNE:\\n- W stylu ciękiego BOTCAMPA - jak sierżanta Hartmana w filmie Full Metal Jacket \\n- Odnieś się do postępów (jeśli widoczne).\\n- ZMUSZAJ  do kontynuacji. Jak w sieżant w Full Metal Jacket\\n- Jeśli to pierwsza aktywność, powitaj i zmotywuj.\\n- Jeśli użytkownik poprawia wyniki, podkreśl to.\\n- Dodaj 2-3 emoji dla lepszego efektu. Pamietaj że jesteś śierżantem USMC"
+                }
+            }
+        },
+        "anthropic": {
+            "default_model": "claude-3-sonnet-20240229",
+            "generation_params": {
+                "temperature": 0.7,
+                "max_tokens": 2048
+            },
+            "prompts": {}
+        },
+        "openai": {
+            "default_model": "gpt-4-turbo",
+            "generation_params": {
+                "temperature": 0.7,
+                "max_tokens": 2048
+            },
+            "prompts": {}
+        }
+    }
+}

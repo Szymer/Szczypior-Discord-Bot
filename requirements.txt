@@ -2,3 +2,17 @@
 discord.py>=2.3.0
 python-dotenv>=1.0.0
 aiohttp>=3.9.0
+
+# Google APIs
+google-generativeai>=0.3.0
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.110.0
+gspread>=5.12.0
+
+# Obsługa obrazów
+Pillow>=10.1.0
+
+# Parsowanie i walidacja danych
+pydantic>=2.5.0
