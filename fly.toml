@@ -1,0 +1,23 @@
+# fly.toml app configuration file generated for szczypior-discord-bot
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+
+app = "szczypior-discord-bot"
+primary_region = "waw"  # Warsaw, Poland - wybierz region najbliżej Twojej lokalizacji
+
+[build]
+
+[env]
+  # Zmienne środowiskowe nie-wrażliwe można ustawić tutaj
+  # Dla wrażliwych danych użyj: fly secrets set NAZWA="wartość"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false  # Bot powinien działać ciągle
+  auto_start_machines = true
+  min_machines_running = 1  # Przynajmniej jedna instancja zawsze włączona
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256  # 256MB powinno wystarczyć dla bota Discord
