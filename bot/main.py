@@ -562,20 +562,28 @@ async def podsumowanie(
             last_sunday = now - timedelta(days=days_since_sunday + 7)
             last_saturday = last_sunday + timedelta(days=6)
             
-            filtered_activities = [
-                a for a in all_activities
-                if last_sunday <= datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S") <= last_saturday
-            ]
+            for a in all_activities:
+                try:
+                    activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
+                    if last_sunday <= activity_date <= last_saturday:
+                        filtered_activities.append(a)
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
+                    continue
             period_title = f"Ostatni tydzień ({last_sunday.strftime('%d.%m')} - {last_saturday.strftime('%d.%m')})"
         elif okres == "biezacy_tydzien":
             # Bieżący tydzień (od niedzieli do dziś)
             days_since_sunday = (now.weekday() + 1) % 7
             this_sunday = now - timedelta(days=days_since_sunday)
             
-            filtered_activities = [
-                a for a in all_activities
-                if datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S") >= this_sunday
-            ]
+            for a in all_activities:
+                try:
+                    activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
+                    if activity_date >= this_sunday:
+                        filtered_activities.append(a)
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
+                    continue
             period_title = f"Bieżący tydzień (od {this_sunday.strftime('%d.%m')})"
         elif okres == "miesiac":
             # Ostatni miesiąc kalendarzowy
@@ -586,11 +594,14 @@ async def podsumowanie(
                 last_month_year = now.year
                 last_month = now.month - 1
             
-            filtered_activities = [
-                a for a in all_activities
-                if datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S").month == last_month
-                and datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S").year == last_month_year
-            ]
+            for a in all_activities:
+                try:
+                    activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
+                    if activity_date.month == last_month and activity_date.year == last_month_year:
+                        filtered_activities.append(a)
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
+                    continue
             
             month_names = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", 
                           "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
@@ -654,8 +665,8 @@ async def podsumowanie(
         await interaction.followup.send(embed=embed)
         
     except Exception as e:
-        print(f"❌ Błąd generowania podsumowania: {e}")
-        await interaction.followup.send(f"❌ Wystąpił błąd: {e}")
+        logger.error(f"Błąd generowania podsumowania: {e}", exc_info=True)
+        await interaction.followup.send(f"❌ Wystąpił błąd podczas generowania podsumowania. Spróbuj ponownie.")
 
 
 @podsumowanie.autocomplete('okres')
@@ -775,7 +786,7 @@ Wygeneruj tylko tekst podsumowania, bez dodatkowych komentarzy."""
         return f"Świetna robota! W okresie '{period}' zrealizowano {stats['total_activities']} aktywności na łączny dystans {stats['total_distance']:.1f} km! 🎉"
         
     except Exception as e:
-        print(f"❌ Błąd generowania komentarza AI: {e}")
+        logger.error(f"Błąd generowania komentarza AI: {e}", exc_info=True)
         return f"Imponujące wyniki w okresie '{period}'! Łącznie {stats['total_activities']} aktywności i {stats['total_points']} punktów! 💪"
 
 
