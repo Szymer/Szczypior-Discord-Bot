@@ -755,7 +755,15 @@ async def _generate_ai_summary(stats: dict, period: str) -> str:
         Komentarz wygenerowany przez AI
     """
     try:
-        prompt = f"""Wygeneruj krótkie, motywujące podsumowanie aktywności sportowej dla okresu: {period}
+        # Pobierz prompt z konfiguracji
+        from bot.config_manager import config_manager
+        provider = config_manager.get_llm_provider()
+        prompts = config_manager.get_llm_prompts(provider)
+        
+        prompt_template = prompts.get("period_summary")
+        if not prompt_template:
+            # Fallback do starego promptu jeśli nie ma w konfiguracji
+            prompt = f"""Wygeneruj krótkie, motywujące podsumowanie aktywności sportowej dla okresu: {period}
 
 STATYSTYKI:
 - Łączna liczba aktywności: {stats['total_activities']}
@@ -775,6 +783,26 @@ WYMAGANIA:
 6. NIE używaj markdown (bez **bold**, _italic_, itp.)
 
 Wygeneruj tylko tekst podsumowania, bez dodatkowych komentarzy."""
+        else:
+            # Przygotuj tekst dla najdłuższego pływania
+            longest_swim_text = ""
+            if stats.get('longest_swim'):
+                longest_swim_text = f"- Najdłuższe pływanie: {stats['longest_swim']['nick']} ({stats['longest_swim']['dystans']} km)"
+            
+            # Wypełnij szablon promptu
+            prompt = prompt_template.format(
+                period=period,
+                total_activities=stats['total_activities'],
+                total_distance=f"{stats['total_distance']:.1f}",
+                total_points=stats['total_points'],
+                active_users=stats['active_users'],
+                top_scorer_nick=stats['top_scorer']['nick'],
+                top_scorer_points=stats['top_scorer']['punkty'],
+                longest_run_nick=stats['longest_run']['nick'],
+                longest_run_distance=stats['longest_run']['dystans'],
+                longest_run_type=stats['longest_run']['typ'],
+                longest_swim_text=longest_swim_text
+            )
 
         response = await llm_client.generate_text(prompt)
         

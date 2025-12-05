@@ -147,40 +147,18 @@ class BotOrchestrator:
             Słownik z danymi aktywności lub None
         """
         try:
-            # Przygotuj prompt dla AI
-            prompt = f"""Przeanalizuj poniższą wiadomość tekstową i wyciągnij dane o aktywności sportowej.
-
-WIADOMOŚĆ UŻYTKOWNIKA:
-{text}
-
-INSTRUKCJE:
-1. Szukaj dystansu w formatach: "1250m", "5km", "10.5 km", "2.3 kilometers", "1500 metrów"
-2. Konwertuj wszystkie dystanse na kilometry (m → km, mile → km)
-3. Szukaj czasu w formatach: "43:12", "1:23:45", "45 min", "1h 20min"
-4. Rozpoznaj typ aktywności: pływanie, bieganie, rower, spacer, cardio, etc.
-
-MAPOWANIE TYPÓW (zwróć dokładnie taką wartość):
-- Pływanie/Swimming/Basen → plywanie
-- Bieganie/Running/Bieg → bieganie_teren
-- Bieżnia/Treadmill → bieganie_bieznia
-- Rower/Cycling/Bike → rower
-- Spacer/Walking/Hiking → spacer
-- Siłownia/Gym/Fitness/Soccer/Cardio → cardio
-
-Zwróć TYLKO obiekt JSON (bez markdown, bez ```json):
-{{
-    "typ_aktywnosci": "dokładna wartość z mapowania powyżej",
-    "dystans": liczba_w_km (float),
-    "czas": "format MM:SS lub HH:MM:SS",
-    "komentarz": "krótki opis co rozpoznałeś"
-}}
-
-Jeśli nie wykryjesz aktywności, zwróć:
-{{
-    "typ_aktywnosci": null,
-    "dystans": null,
-    "komentarz": "Nie wykryto danych o aktywności"
-}}"""
+            # Pobierz prompt z konfiguracji
+            provider = config_manager.get_llm_provider()
+            prompts = config_manager.get_llm_prompts(provider)
+            
+            prompt_template = prompts.get("text_analysis")
+            if not prompt_template:
+                raise ConfigurationError(
+                    f"Missing 'text_analysis' prompt for provider '{provider}' in config.json"
+                )
+            
+            # Wypełnij szablon promptu
+            prompt = prompt_template.format(text=text)
 
             # Wywołaj AI używając generate_text (synchroniczne wywołanie)
             # UWAGA: używamy self.gemini_client, nie self.llm_client
