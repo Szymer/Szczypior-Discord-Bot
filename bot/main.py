@@ -9,6 +9,15 @@ from .sheets_manager import SheetsManager
 from .llm_clients import get_llm_client
 from .orchestrator import BotOrchestrator
 from .constants import ACTIVITY_TYPES
+from .utils import (
+    get_display_name, 
+    create_embed, 
+    create_activity_embed,
+    parse_distance,
+    safe_int,
+    aggregate_by_field,
+    calculate_user_totals
+)
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
@@ -95,28 +104,31 @@ async def hello(ctx):
 
 @bot.command(name="typy_aktywnosci")
 async def list_activities(ctx):
-    """Wyświetla dostępne typy aktywności."""
-    embed = discord.Embed(
-        title="🏃 Dostępne typy aktywności",
-        description="Lista wszystkich typów aktywności zgodnie z wytycznymi konkursu:",
-        color=discord.Color.green()
-    )
-    
+    """
+    Wyświetla dostępne typy aktywności.
+    """
+    fields = []
     for activity, info in ACTIVITY_TYPES.items():
         bonuses_text = ", ".join(info['bonuses']) if info['bonuses'] else "brak"
         min_dist_text = f"{info['min_distance']} km" if info['min_distance'] > 0 else "BRAK"
         
-        embed.add_field(
-            name=f"{info['emoji']} {info['display_name']}",
-            value=(
+        fields.append({
+            'name': f"{info['emoji']} {info['display_name']}",
+            'value': (
                 f"**{info['base_points']} pkt/{info['unit']}**\n"
                 f"Min. dystans: {min_dist_text}\n"
                 f"Bonusy: {bonuses_text}"
             ),
-            inline=True
-        )
+            'inline': True
+        })
     
-    embed.set_footer(text="Użyj: !dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]")
+    embed = create_embed(
+        title="🏃 Dostępne typy aktywności",
+        description="Lista wszystkich typów aktywności zgodnie z wytycznymi konkursu:",
+        color=discord.Color.green(),
+        fields=fields,
+        footer="Użyj: !dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]"
+    )
     await ctx.send(embed=embed)
 
 
@@ -158,7 +170,8 @@ async def add_activity(ctx, activity_type: str, distance: float,
         return
     
     # Zapisz do Google Sheets jeśli dostępny
-    username = str(ctx.author)
+    info = ACTIVITY_TYPES[activity_type]
+    username = get_display_name(ctx.author)
     saved = False
     
     if sheets_manager:
@@ -178,26 +191,22 @@ async def add_activity(ctx, activity_type: str, distance: float,
         except Exception as e:
             print(f"Błąd zapisu do Sheets: {e}")
     
-    # Przygotuj odpowiedź
-    info = ACTIVITY_TYPES[activity_type]
-    embed = discord.Embed(
-        title=f"{info['emoji']} Aktywność dodana!",
-        color=discord.Color.green() if saved else discord.Color.orange()
-    )
-    
-    embed.add_field(name="Użytkownik", value=ctx.author.mention, inline=True)
-    embed.add_field(name="Typ", value=info['display_name'], inline=True)
-    embed.add_field(name=f"Dystans ({info['unit']})", value=f"{distance}", inline=True)
-    
+    # Przygotuj dodatkowe pola
+    additional_fields = []
     if weight and weight > 0:
-        embed.add_field(name="Obciążenie", value=f"{weight} kg", inline=True)
+        additional_fields.append({'name': "Obciążenie", 'value': f"{weight} kg", 'inline': True})
     if elevation and elevation > 0:
-        embed.add_field(name="Przewyższenie", value=f"{elevation} m", inline=True)
+        additional_fields.append({'name': "Przewyższenie", 'value': f"{elevation} m", 'inline': True})
     
-    embed.add_field(name="Punkty", value=f"🏆 **{points}**", inline=False)
-    
-    if not saved:
-        embed.set_footer(text="⚠️ Dane nie zostały zapisane do Google Sheets")
+    # Użyj create_activity_embed z utils
+    embed = create_activity_embed(
+        activity_info=info,
+        username=ctx.author.mention,
+        distance=distance,
+        points=points,
+        additional_fields=additional_fields,
+        saved=saved
+    )
     
     await ctx.send(embed=embed)
 
@@ -213,7 +222,7 @@ async def my_history(ctx, limit: int = 5):
         await ctx.send("❌ Google Sheets nie jest skonfigurowany. Użyj `!pomoc` aby dowiedzieć się jak go skonfigurować.")
         return
     
-    username = str(ctx.author)
+    username = get_display_name(ctx.author)
     history = sheets_manager.get_user_history(username)
     
     if not history:
@@ -223,23 +232,25 @@ async def my_history(ctx, limit: int = 5):
     # Ogranicz do ostatnich N wpisów
     history = history[-limit:][::-1]  # Odwróć aby najnowsze były na górze
     
-    embed = discord.Embed(
-        title=f"📊 Historia aktywności - {ctx.author.display_name}",
-        color=discord.Color.blue()
-    )
-    
+    fields = []
     for record in history:
         activity = record.get('Aktywność', 'N/A')
-        distance = record.get('Dystans (km)', 0)
-        points = record.get('Punkty', 0)
+        distance = parse_distance(record.get('Dystans (km)', 0))
+        points = safe_int(record.get('Punkty', 0))
         date = record.get('Data', 'N/A')
         
         emoji = ACTIVITY_TYPES.get(activity.lower(), {}).get('emoji', '📝')
-        embed.add_field(
-            name=f"{emoji} {activity} - {date}",
-            value=f"Wartość: {distance} | Punkty: {points} 🏆",
-            inline=False
-        )
+        fields.append({
+            'name': f"{emoji} {activity} - {date}",
+            'value': f"Wartość: {distance} | Punkty: {points} 🏆",
+            'inline': False
+        })
+    
+    embed = create_embed(
+        title=f"📊 Historia aktywności - {ctx.author.display_name}",
+        color=discord.Color.blue(),
+        fields=fields
+    )
     
     await ctx.send(embed=embed)
 
@@ -251,18 +262,19 @@ async def my_points(ctx):
         await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
         return
     
-    username = str(ctx.author)
+    username = get_display_name(ctx.author)
     total_points = sheets_manager.get_user_total_points(username)
     history = sheets_manager.get_user_history(username)
     
-    embed = discord.Embed(
-        title=f"🏆 Twoje punkty",
-        color=discord.Color.gold()
+    embed = create_embed(
+        title="🏆 Twoje punkty",
+        color=discord.Color.gold(),
+        fields=[
+            {'name': "Użytkownik", 'value': ctx.author.mention, 'inline': True},
+            {'name': "Całkowite punkty", 'value': f"**{total_points}** 🏆", 'inline': True},
+            {'name': "Liczba aktywności", 'value': f"{len(history)}", 'inline': True}
+        ]
     )
-    
-    embed.add_field(name="Użytkownik", value=ctx.author.mention, inline=True)
-    embed.add_field(name="Całkowite punkty", value=f"**{total_points}** 🏆", inline=True)
-    embed.add_field(name="Liczba aktywności", value=f"{len(history)}", inline=True)
     
     await ctx.send(embed=embed)
 
@@ -270,56 +282,53 @@ async def my_points(ctx):
 @bot.command(name="pomoc")
 async def help_command(ctx):
     """Wyświetla listę dostępnych komend."""
-    embed = discord.Embed(
+    embed = create_embed(
         title="🌿 Szczypior Bot - Pomoc",
         description="Lista dostępnych komend:",
-        color=discord.Color.green()
+        color=discord.Color.green(),
+        fields=[
+            {
+                'name': "📝 Podstawowe",
+                'value': (
+                    "`!ping` - Sprawdza latencję bota\n"
+                    "`!hello` - Powitanie\n"
+                    "`!pomoc` - Ta wiadomość"
+                ),
+                'inline': False
+            },
+            {
+                'name': "🏃 Aktywności",
+                'value': (
+                    "`!typy_aktywnosci` - Lista dostępnych aktywności\n"
+                    "`!dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]` - Dodaj aktywność\n"
+                    "`!moja_historia [limit]` - Twoje ostatnie aktywności\n"
+                    "`!moje_punkty` - Sprawdź swoje punkty"
+                ),
+                'inline': False
+            },
+            {
+                'name': "📊 Rankingi i statystyki",
+                'value': (
+                    "`!ranking [limit]` - Ranking użytkowników według punktów\n"
+                    "`!stats` - Statystyki całego serwera\n"
+                    "`!stats_aktywnosci` - Najpopularniejsze aktywności"
+                ),
+                'inline': False
+            },
+            {
+                'name': "📊 Przykłady",
+                'value': (
+                    "`!dodaj_aktywnosc bieganie_teren 5.2`\n"
+                    "`!dodaj_aktywnosc bieganie_teren 10 5` (z 5kg obciążeniem)\n"
+                    "`!dodaj_aktywnosc bieganie_teren 15 0 200` (z 200m przewyższeniem)\n"
+                    "`!dodaj_aktywnosc rower 25` (rower 25km)\n"
+                    "`!moja_historia 10` (ostatnie 10 aktywności)"
+                ),
+                'inline': False
+            }
+        ],
+        footer="Bot stworzony dla miłośników aktywności fizycznej! 🌿"
     )
-    
-    embed.add_field(
-        name="📝 Podstawowe",
-        value=(
-            "`!ping` - Sprawdza latencję bota\n"
-            "`!hello` - Powitanie\n"
-            "`!pomoc` - Ta wiadomość"
-        ),
-        inline=False
-    )
-    
-    embed.add_field(
-        name="🏃 Aktywności",
-        value=(
-            "`!typy_aktywnosci` - Lista dostępnych aktywności\n"
-            "`!dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]` - Dodaj aktywność\n"
-            "`!moja_historia [limit]` - Twoje ostatnie aktywności\n"
-            "`!moje_punkty` - Sprawdź swoje punkty"
-        ),
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📊 Rankingi i statystyki",
-        value=(
-            "`!ranking [limit]` - Ranking użytkowników według punktów\n"
-            "`!stats` - Statystyki całego serwera\n"
-            "`!stats_aktywnosci` - Najpopularniejsze aktywności"
-        ),
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📊 Przykłady",
-        value=(
-            "`!dodaj_aktywnosc bieganie_teren 5.2`\n"
-            "`!dodaj_aktywnosc bieganie_teren 10 5` (z 5kg obciążeniem)\n"
-            "`!dodaj_aktywnosc bieganie_teren 15 0 200` (z 200m przewyższeniem)\n"
-            "`!dodaj_aktywnosc rower 25` (rower 25km)\n"
-            "`!moja_historia 10` (ostatnie 10 aktywności)"
-        ),
-        inline=False
-    )
-    
-    embed.set_footer(text="Bot stworzony dla miłośników aktywności fizycznej! 🌿")
     await ctx.send(embed=embed)
 
 
@@ -335,39 +344,39 @@ async def ranking(ctx, limit: int = 10):
         return
     
     try:
-        # Pobierz wszystkie rekordy
+        # Pobierz wszystkie rekordy i oblicz totalne punkty
         all_records = sheets_manager.worksheet.get_all_records()
         
         if not all_records:
             await ctx.send("📊 Brak danych do wyświetlenia rankingu.")
             return
         
-        # Oblicz punkty dla każdego użytkownika
-        user_points = {}
-        for record in all_records:
-            username = record.get('User', '')
-            points = record.get('Punkty', 0)
-            if username:
-                user_points[username] = user_points.get(username, 0) + points
+        # Użyj calculate_user_totals z utils
+        user_totals = calculate_user_totals(all_records)
         
         # Sortuj według punktów malejąco
-        sorted_users = sorted(user_points.items(), key=lambda x: x[1], reverse=True)
-        sorted_users = sorted_users[:limit]
-        
-        embed = discord.Embed(
-            title="🏆 Ranking użytkowników",
-            description=f"Top {min(limit, len(sorted_users))} użytkowników według punktów:",
-            color=discord.Color.gold()
-        )
+        sorted_users = sorted(
+            user_totals.items(), 
+            key=lambda x: x[1]['total_points'], 
+            reverse=True
+        )[:limit]
         
         medals = ["🥇", "🥈", "🥉"]
-        for i, (username, points) in enumerate(sorted_users):
+        fields = []
+        for i, (username, data) in enumerate(sorted_users):
             medal = medals[i] if i < 3 else f"{i+1}."
-            embed.add_field(
-                name=f"{medal} {username}",
-                value=f"**{points}** punktów 🏆",
-                inline=False
-            )
+            fields.append({
+                'name': f"{medal} {username}",
+                'value': f"**{data['total_points']}** punktów 🏆",
+                'inline': False
+            })
+        
+        embed = create_embed(
+            title="🏆 Ranking użytkowników",
+            description=f"Top {min(limit, len(sorted_users))} użytkowników według punktów:",
+            color=discord.Color.gold(),
+            fields=fields
+        )
         
         await ctx.send(embed=embed)
     except Exception as e:
@@ -391,8 +400,10 @@ async def server_stats(ctx):
         # Oblicz statystyki
         total_activities = len(all_records)
         unique_users = len(set(r.get('User', '') for r in all_records if r.get('User')))
-        total_points = sum(r.get('Punkty', 0) for r in all_records)
-        total_distance = sum(r.get('Dystans (km)', 0) for r in all_records)
+        
+        # Użyj parse_distance i safe_int z utils
+        total_points = sum(safe_int(r.get('Punkty', 0)) for r in all_records)
+        total_distance = sum(parse_distance(r.get('Dystans (km)', 0)) for r in all_records)
         
         # Najpopularniejsza aktywność
         activities = [r.get('Aktywność', '') for r in all_records if r.get('Aktywność')]
@@ -405,20 +416,17 @@ async def server_stats(ctx):
             popular_activity = "N/A"
             popular_count = 0
         
-        embed = discord.Embed(
+        embed = create_embed(
             title="📊 Statystyki serwera",
             description="Ogólne statystyki wszystkich użytkowników:",
-            color=discord.Color.blue()
-        )
-        
-        embed.add_field(name="👥 Aktywni użytkownicy", value=f"**{unique_users}**", inline=True)
-        embed.add_field(name="📝 Liczba aktywności", value=f"**{total_activities}**", inline=True)
-        embed.add_field(name="🏆 Suma punktów", value=f"**{total_points}**", inline=True)
-        embed.add_field(name="📏 Suma dystansu", value=f"**{total_distance:.1f}** km", inline=True)
-        embed.add_field(
-            name="⭐ Najpopularniejsza aktywność",
-            value=f"**{popular_activity}** ({popular_count}x)",
-            inline=True
+            color=discord.Color.blue(),
+            fields=[
+                {'name': "👥 Aktywni użytkownicy", 'value': f"**{unique_users}**", 'inline': True},
+                {'name': "📝 Liczba aktywności", 'value': f"**{total_activities}**", 'inline': True},
+                {'name': "🏆 Suma punktów", 'value': f"**{total_points}**", 'inline': True},
+                {'name': "📏 Suma dystansu", 'value': f"**{total_distance:.1f}** km", 'inline': True},
+                {'name': "⭐ Najpopularniejsza aktywność", 'value': f"**{popular_activity}** ({popular_count}x)", 'inline': True}
+            ]
         )
         
         await ctx.send(embed=embed)
@@ -440,49 +448,38 @@ async def activity_stats(ctx):
             await ctx.send("📊 Brak danych do wyświetlenia statystyk.")
             return
         
-        # Grupuj według typu aktywności
-        activity_stats = {}
-        for record in all_records:
-            activity = record.get('Aktywność', '').lower()
-            if activity and activity in ACTIVITY_TYPES:
-                if activity not in activity_stats:
-                    activity_stats[activity] = {
-                        'count': 0,
-                        'total_distance': 0,
-                        'total_points': 0
-                    }
-                activity_stats[activity]['count'] += 1
-                activity_stats[activity]['total_distance'] += record.get('Dystans (km)', 0)
-                activity_stats[activity]['total_points'] += record.get('Punkty', 0)
+        # Użyj aggregate_by_field z utils
+        activity_stats_data = aggregate_by_field(all_records, 'Aktywność')
         
         # Sortuj według liczby aktywności
         sorted_activities = sorted(
-            activity_stats.items(),
+            activity_stats_data.items(),
             key=lambda x: x[1]['count'],
             reverse=True
         )
         
-        embed = discord.Embed(
-            title="📊 Statystyki aktywności",
-            description="Podsumowanie wszystkich typów aktywności:",
-            color=discord.Color.purple()
-        )
-        
+        fields = []
         for activity, stats in sorted_activities:
-            info = ACTIVITY_TYPES.get(activity, {})
+            info = ACTIVITY_TYPES.get(activity.lower(), {})
             emoji = info.get('emoji', '📝')
-            embed.add_field(
-                name=f"{emoji} {activity.capitalize()}",
-                value=(
+            unit = info.get('unit', 'km')
+            
+            fields.append({
+                'name': f"{emoji} {activity.capitalize()}",
+                'value': (
                     f"Liczba: **{stats['count']}**\n"
-                    f"Suma: **{stats['total_distance']:.1f}** {info.get('unit', 'km')}\n"
+                    f"Suma: **{stats['total_distance']:.1f}** {unit}\n"
                     f"Punkty: **{stats['total_points']}** 🏆"
                 ),
-                inline=True
-            )
+                'inline': True
+            })
         
-        if not sorted_activities:
-            embed.description = "Brak zapisanych aktywności."
+        embed = create_embed(
+            title="📊 Statystyki aktywności",
+            description="Podsumowanie wszystkich typów aktywności:" if sorted_activities else "Brak zapisanych aktywności.",
+            color=discord.Color.purple(),
+            fields=fields if sorted_activities else None
+        )
         
         await ctx.send(embed=embed)
     except Exception as e:

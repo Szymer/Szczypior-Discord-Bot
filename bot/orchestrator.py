@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 import discord
 from .config_manager import config_manager
 from .constants import ACTIVITY_TYPES
+from .utils import get_display_name, parse_distance
 
 class BotOrchestrator:
     """Orkiestruje logikę biznesową bota."""
@@ -66,17 +67,15 @@ class BotOrchestrator:
             # Pobierz historię użytkownika dla kontekstu
             user_history_text = ""
             if self.sheets_manager:
-                display_name = message.author.global_name if message.author.global_name else str(message.author)
+                display_name = get_display_name(message.author)
                 user_activities = self.sheets_manager.get_user_history(display_name)
                 if user_activities:
                     recent = user_activities[-5:]  # Ostatnie 5 aktywności
-                    history_lines = []
-                    for act in recent:
-                        dist = act.get('Dystans (km)', '0')
-                        # Dystans jest już stringiem z przecinkiem (format Polski), używamy go bezpośrednio
-                        history_lines.append(
-                            f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} {dist}km, {act.get('PUNKTY', '0')} pkt"
-                        )
+                    history_lines = [
+                        f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} "
+                        f"{parse_distance(act.get('Dystans (km)', 0))}km, {act.get('PUNKTY', '0')} pkt"
+                        for act in recent
+                    ]
                     user_history_text = "\n".join(history_lines)
 
             # Analiza obrazu przez Gemini
@@ -211,8 +210,8 @@ class BotOrchestrator:
             weight_value = float(analysis.get('obciazenie') or 0)
             has_weight = weight_value > 5
             
-            # Użyj global_name jeśli dostępne, w przeciwnym razie username
-            display_name = message.author.global_name if message.author.global_name else str(message.author)
+            # Użyj get_display_name z utils
+            display_name = get_display_name(message.author)
             
             return self.sheets_manager.add_activity(
                 username=display_name,
@@ -408,34 +407,15 @@ WAŻNE:
         # Przygotuj kontekst historii
         if previous_activities:
             recent = previous_activities[-5:]
-            history_summary = []
-            for act in recent:
-                # Konwertuj dystans na float dla wyświetlenia
-                dist = act.get('Dystans (km)', 0)
-                try:
-                    if isinstance(dist, str):
-                        dist_float = float(dist.replace(',', '.'))
-                    else:
-                        dist_float = float(dist)
-                except (ValueError, AttributeError):
-                    dist_float = 0
-                
-                history_summary.append(
-                    f"- {act.get('Rodzaj Aktywności', 'N/A')}: {dist_float} km, {act.get('PUNKTY', 0)} pkt (Data: {act.get('Data', 'N/A')})"
-                )
+            history_summary = [
+                f"- {act.get('Rodzaj Aktywności', 'N/A')}: {parse_distance(act.get('Dystans (km)', 0))} km, "
+                f"{act.get('PUNKTY', 0)} pkt (Data: {act.get('Data', 'N/A')})"
+                for act in recent
+            ]
             history_text = "\n".join(history_summary)
-            # Konwertuj dystans na float, obsługując przecinki i stringi
-            distances = []
-            for act in previous_activities:
-                dist = act.get('Dystans (km)', 0)
-                try:
-                    if isinstance(dist, str):
-                        dist = float(dist.replace(',', '.'))
-                    else:
-                        dist = float(dist)
-                    distances.append(dist)
-                except (ValueError, AttributeError):
-                    distances.append(0)
+            
+            # Użyj parse_distance do konwersji wszystkich dystansów
+            distances = [parse_distance(act.get('Dystans (km)', 0)) for act in previous_activities]
             total_distance = sum(distances)
             total_points = sum(int(act.get('PUNKTY', 0)) for act in previous_activities)
             activity_count = len(previous_activities)

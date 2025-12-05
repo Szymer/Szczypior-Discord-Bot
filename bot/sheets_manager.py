@@ -5,6 +5,7 @@ import gspread
 from google.oauth2.credentials import Credentials
 from datetime import datetime
 from typing import Optional, List, Dict
+from .utils import parse_distance
 
 
 class SheetsManager:
@@ -62,7 +63,6 @@ class SheetsManager:
             Lista słowników z historią aktywności
         """
         try:
-            # Użyj get_all_activities_with_timestamps() aby uniknąć problemu z duplikatami w nagłówkach
             all_records = self.get_all_activities_with_timestamps()
             user_records = [r for r in all_records if r.get('Nick') == username]
             return user_records
@@ -319,12 +319,9 @@ class SheetsManager:
                     record = {}
                     for i, header in enumerate(headers):
                         if i < len(row):
-                            # Dla dystansu konwertuj przecinek na kropkę i zamień na float
+                            # Dla dystansu używamy parse_distance z utils
                             if header == 'Dystans (km)' and row[i]:
-                                try:
-                                    record[header] = float(row[i].replace(',', '.'))
-                                except (ValueError, AttributeError):
-                                    record[header] = 0
+                                record[header] = parse_distance(row[i])
                             else:
                                 record[header] = row[i]
                         else:
