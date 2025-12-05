@@ -13,8 +13,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Skopiuj resztę plików aplikacji
 COPY . .
 
-# Skopiuj pliki konfiguracyjne (jeśli istnieją)
+# Skopiuj skrypt startowy
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 # Fly.io secrets będą używane dla wrażliwych danych
+# authorized_user.json będzie tworzony przy starcie z GOOGLE_CREDENTIALS
 
 # Polecenie do uruchomienia bota po starcie kontenera
-CMD ["python", "-m", "bot.main"]
+CMD ["/app/start.sh"]
