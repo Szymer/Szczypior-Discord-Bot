@@ -43,7 +43,7 @@ class GeminiClient(BaseLLMClient):
 
         # Ustaw domyślny model jeśli nie podano
         if not self.model_name:
-            self.model_name = "gemini-1.5-flash"
+            self.model_name = "models/gemini-2.5-flash-lite"
 
         # Zapisz parametry generowania
         self.generation_params = generation_params or {}
