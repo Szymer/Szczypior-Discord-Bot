@@ -147,8 +147,9 @@ class BotOrchestrator:
             Słownik z danymi aktywności lub None
         """
         try:
-            # Pobierz prompt z konfiguracji
+            # Pobierz globalny system_prompt i prompt dla text_analysis
             provider = config_manager.get_llm_provider()
+            system_prompt = config_manager.get_system_prompt(provider)
             prompts = config_manager.get_llm_prompts(provider)
             
             prompt_template = prompts.get("text_analysis")
@@ -158,12 +159,14 @@ class BotOrchestrator:
                 )
             
             # Wypełnij szablon promptu
-            prompt = prompt_template.format(text=text)
+            user_prompt = prompt_template.format(text=text)
 
-            # Wywołaj AI używając generate_text (synchroniczne wywołanie)
-            # UWAGA: używamy self.gemini_client, nie self.llm_client
+            # Wywołaj AI używając generate_text z system_instruction
             loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, self.gemini_client.generate_text, prompt)
+            response = await loop.run_in_executor(
+                None, 
+                lambda: self.gemini_client.generate_text(user_prompt, system_instruction=system_prompt)
+            )
 
             if not response:
                 print("⚠️ AI nie zwróciło odpowiedzi")
@@ -362,28 +365,22 @@ class BotOrchestrator:
         self, image_url: str, text_context: Optional[str], user_history: Optional[str] = None
     ) -> Dict[str, Any]:
         """Tworzy prompt i wywołuje analizę obrazu w LLM Client."""
-        # Pobierz prompty z konfiguracji
+        # Pobierz globalny system_prompt i prompt dla activity_analysis
         provider = config_manager.get_llm_provider()
+        system_prompt = config_manager.get_system_prompt(provider)
         prompts = config_manager.get_llm_prompts(provider)
-        
-        activity_analysis = prompts.get("activity_analysis", {})
-        system_prompt = activity_analysis.get("system_prompt")
+        activity_analysis_prompt = prompts.get("activity_analysis", "")
         
         # Buduj user prompt z kontekstem
-        if text_context:
-            user_prompt_template = activity_analysis.get("user_prompt_with_context", "{system_prompt}")
-            user_prompt = user_prompt_template.format(
-                text_context=text_context or "",
-                user_history=user_history or "Brak wcześniejszych aktywności.",
-                system_prompt="" # system_prompt będzie w system_instruction
-            )
-        else:
-            user_prompt = ""  # Tylko system_instruction
+        user_prompt = activity_analysis_prompt.format(
+            text_context=text_context or "",
+            user_history=user_history or "Brak wcześniejszych aktywności."
+        )
         
         # Wywołaj analyze_image z system_instruction
         return self.gemini_client.analyze_image(
             image_url, 
-            user_prompt if user_prompt else "Przeanalizuj to zdjęcie aktywności sportowej.",
+            user_prompt,
             system_instruction=system_prompt
         )
 
@@ -444,10 +441,19 @@ class BotOrchestrator:
             "punkty": points,
         }
 
-        prompt = self._build_motivational_comment_prompt(current_activity_summary, user_history)
+        user_prompt = self._build_motivational_comment_prompt(current_activity_summary, user_history)
+        
+        # Pobierz globalny system_prompt
+        provider = config_manager.get_llm_provider()
+        system_prompt = config_manager.get_system_prompt(provider)
 
         try:
-            return self.gemini_client.generate_text(prompt, temperature=0.8, max_tokens=200)
+            return self.gemini_client.generate_text(
+                user_prompt, 
+                temperature=0.8, 
+                max_tokens=200,
+                system_instruction=system_prompt
+            )
         except (LLMAnalysisError, LLMTimeoutError) as e:
             logger.error("Failed to generate AI comment", exc_info=True)
             return "Dobra robota!"  # Fallback

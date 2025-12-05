@@ -804,7 +804,10 @@ Wygeneruj tylko tekst podsumowania, bez dodatkowych komentarzy."""
                 longest_swim_text=longest_swim_text
             )
 
-        response = await llm_client.generate_text(prompt)
+        # Pobierz globalny system_prompt
+        system_prompt = config_manager.get_system_prompt(provider)
+        
+        response = await llm_client.generate_text(prompt, system_instruction=system_prompt)
         
         if response:
             # Usuń markdown formatting jeśli AI je dodało

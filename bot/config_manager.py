@@ -147,16 +147,28 @@ class ConfigManager:
             return {}
 
         prompts_config = provider_config.get("prompts", {})
+        
+        # Prompty są teraz proste stringi
+        return prompts_config
 
-        # Wyciągnij system_prompt z każdego promptu
-        simplified_prompts = {}
-        for prompt_name, prompt_data in prompts_config.items():
-            if isinstance(prompt_data, dict) and "system_prompt" in prompt_data:
-                simplified_prompts[prompt_name] = prompt_data["system_prompt"]
-            elif isinstance(prompt_data, str):
-                simplified_prompts[prompt_name] = prompt_data
+    def get_system_prompt(self, provider: Optional[str] = None) -> Optional[str]:
+        """
+        Pobiera globalny system_prompt dla danego dostawcy LLM.
+        
+        Args:
+            provider: Nazwa dostawcy (np. 'gemini'). Jeśli None, używa domyślnego.
+            
+        Returns:
+            System prompt jako string lub None.
+        """
+        if provider is None:
+            provider = self.get_llm_provider()
 
-        return simplified_prompts
+        provider_config = self.get_llm_config(provider)
+        if not provider_config:
+            return None
+
+        return provider_config.get("system_prompt")
 
     def get_activity_keywords(self) -> Dict[str, list[str]]:
         """Zwraca słownik słów kluczowych przypisanych do typów aktywności."""
