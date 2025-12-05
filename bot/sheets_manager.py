@@ -1,11 +1,14 @@
 """Moduł do obsługi Google Sheets."""
 
+import logging
 import os
 import gspread
 from google.oauth2.credentials import Credentials
 from datetime import datetime
 from typing import Optional, List, Dict
 from .utils import parse_distance
+
+logger = logging.getLogger(__name__)
 
 
 class SheetsManager:
@@ -16,6 +19,7 @@ class SheetsManager:
         self.client = None
         self.spreadsheet = None
         self.worksheet = None
+        self.iid_cache = set()  # Cache dla szybkiego sprawdzania duplikatów
         self._authorize()
     
     def _authorize(self):
@@ -39,7 +43,7 @@ class SheetsManager:
                 ]
             )
             self.client = gspread.authorize(creds)
-            print("✅ Autoryzacja przez OAuth")
+            logger.info("Authorized via OAuth")
             
             spreadsheet_id = os.getenv('GOOGLE_SHEETS_SPREADSHEET_ID')
             if not spreadsheet_id:
@@ -47,9 +51,9 @@ class SheetsManager:
             
             self.spreadsheet = self.client.open_by_key(spreadsheet_id)
             self.worksheet = self.spreadsheet.get_worksheet(0)
-            print(f"✅ Połączono z arkuszem: {self.spreadsheet.title}")
+            logger.info("Connected to spreadsheet", extra={"title": self.spreadsheet.title})
         except Exception as e:
-            print(f"❌ Błąd autoryzacji Google Sheets: {e}")
+            logger.error("Google Sheets authorization failed", exc_info=True)
             raise
     
     def get_user_history(self, username: str) -> List[Dict]:
@@ -67,7 +71,7 @@ class SheetsManager:
             user_records = [r for r in all_records if r.get('Nick') == username]
             return user_records
         except Exception as e:
-            print(f"Błąd pobierania historii: {e}")
+            logger.error("Failed to fetch user history", exc_info=True, extra={"username": username})
             return []
     
     def _normalize_activity_type(self, activity_type: str) -> str:
@@ -264,10 +268,18 @@ class SheetsManager:
                 }
             })
             
-            print(f"✅ Dodano aktywność dla {username}: {normalized_activity} {distance}km")
+            # Dodaj IID do cache
+            if iid:
+                self.iid_cache.add(iid)
+            
+            logger.info("Activity added", extra={
+                "username": username,
+                "activity_type": normalized_activity,
+                "distance": distance
+            })
             return True
         except Exception as e:
-            print(f"❌ Błąd dodawania aktywności: {e}")
+            logger.error("Failed to add activity", exc_info=True, extra={"username": username})
             return False
     
     def get_user_total_points(self, username: str) -> int:
@@ -294,9 +306,9 @@ class SheetsManager:
                      'Przewyższenie (m)', 'Obciążenie > 5kg?', 'Spec Ops', 'PUNKTY', 'IID'],
                     index=1
                 )
-                print("✅ Dodano nagłówki do arkusza")
+                logger.info("Headers added to spreadsheet")
         except Exception as e:
-            print(f"Błąd ustawiania nagłówków: {e}")
+            logger.error("Failed to setup headers", exc_info=True)
     
     def get_all_activities_with_timestamps(self) -> List[Dict]:
         """
@@ -330,38 +342,46 @@ class SheetsManager:
             
             return records
         except Exception as e:
-            print(f"Błąd pobierania aktywności: {e}")
+            logger.error("Failed to fetch activities", exc_info=True)
             return []
+    
+    def build_iid_cache(self):
+        """
+        Buduje cache wszystkich IID z arkusza dla szybkiego sprawdzania duplikatów.
+        Wywołaj na starcie bota.
+        """
+        try:
+            logger.info("Building IID cache from spreadsheet")
+            activities = self.get_all_activities_with_timestamps()
+            
+            self.iid_cache.clear()
+            for activity in activities:
+                iid = activity.get('IID', '')
+                if iid:
+                    self.iid_cache.add(iid)
+            
+            logger.info("IID cache built", extra={"entries": len(self.iid_cache)})
+        except Exception as e:
+            logger.error("Failed to build IID cache", exc_info=True)
+            self.iid_cache = set()  # Pusty set w razie błędu
     
     def activity_exists(self, message_id: str, message_timestamp: str) -> bool:
         """
-        Sprawdza czy aktywność już istnieje w arkuszu na podstawie IID.
+        Sprawdza czy aktywność już istnieje w cache IID (szybkie sprawdzenie O(1)).
         
         Args:
             message_id: ID wiadomości Discord
-            message_timestamp: Timestamp wiadomości Discord
+            message_timestamp: Timestamp wiadomości Discord (jako int string)
             
         Returns:
-            True jeśli istnieje, False w przeciwnym razie
+            True jeśli istnieje (duplikat), False w przeciwnym razie
         """
         try:
-            # Buduj IID do sprawdzenia
+            # Buduj IID do sprawdzenia: {timestamp_int}_{message_id}
             iid_to_check = f"{message_timestamp}_{message_id}"
             
-            activities = self.get_all_activities_with_timestamps()
-            
-            print(f"🔍 Sprawdzam duplikat IID: {iid_to_check}")
-            print(f"📋 Znaleziono {len(activities)} aktywności w arkuszu")
-            
-            for activity in activities:
-                existing_iid = activity.get('IID', '')
-                
-                if existing_iid == iid_to_check:
-                    print(f"  ✅ DUPLIKAT ZNALEZIONY! (IID: {existing_iid})")
-                    return True
-            
-            print(f"  ✅ Brak duplikatu - można dodać")
-            return False
+            # Sprawdź w cache (O(1))
+            return iid_to_check in self.iid_cache
         except Exception as e:
-            print(f"Błąd sprawdzania duplikatu: {e}")
+            logger.error("Failed to check for duplicate", exc_info=True)
             return False

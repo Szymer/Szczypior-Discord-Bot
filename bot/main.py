@@ -1,10 +1,16 @@
 """Szczypior Discord Bot - Główny plik uruchomieniowy."""
 
+import logging
 import os
+import sys
+from datetime import datetime, timedelta
+from typing import Optional
+
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
-from typing import Optional
+
 from .sheets_manager import SheetsManager
 from .llm_clients import get_llm_client
 from .orchestrator import BotOrchestrator
@@ -18,15 +24,28 @@ from .utils import (
     aggregate_by_field,
     calculate_user_totals
 )
+from .exceptions import ConfigurationError, SheetsError, LLMError
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
+
+# Konfiguracja loggingu
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Konfiguracja bota
 intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
 intents.guilds = True
+intents.members = True  # Potrzebne do pobierania informacji o członkach
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Menedżer Google Sheets
@@ -43,34 +62,43 @@ orchestrator = None
 async def on_ready():
     """Wywoływane gdy bot jest gotowy."""
     global sheets_manager, llm_client, orchestrator
-    print(f"{bot.user} jest online!")
-    print(f"ID bota: {bot.user.id}")
+    logger.info(f"{bot.user} is online", extra={"bot_id": bot.user.id})
     
     # Inicjalizacja Google Sheets (opcjonalne - tylko jeśli skonfigurowane)
     try:
         sheets_manager = SheetsManager()
         sheets_manager.setup_headers()
-        print("✅ Google Sheets połączony i gotowy")
+        logger.info("Google Sheets connected and ready")
+        
+        # Buduj cache IID dla szybkiego sprawdzania duplikatów
+        sheets_manager.build_iid_cache()
     except Exception as e:
-        print(f"⚠️ Google Sheets niedostępny: {e}")
-        print("ℹ️ Bot będzie działał bez zapisywania danych")
+        logger.warning("Google Sheets unavailable", exc_info=True)
+        logger.info("Bot will work without data persistence")
     
     # Inicjalizacja LLM Client (opcjonalne - tylko jeśli skonfigurowane)
     try:
         llm_client = get_llm_client()
         model_info = llm_client.get_model_info()
-        print(f"✅ LLM Client połączony: {model_info.get('model_name', 'unknown')}")
+        logger.info("LLM Client connected", extra={"model": model_info.get('model_name', 'unknown')})
     except Exception as e:
-        print(f"⚠️ LLM Client niedostępny: {e}")
-        print("ℹ️ Bot będzie działał bez funkcji AI")
+        logger.warning("LLM Client unavailable", exc_info=True)
+        logger.info("Bot will work without AI functions")
     
     # Inicjalizacja orkiestratora
     orchestrator = BotOrchestrator(bot, llm_client, sheets_manager)
     
     # Synchronizacja historii czatu z Google Sheets
     if sheets_manager and llm_client:
-        print("\n🔄 Rozpoczynam synchronizację historii czatu...")
+        logger.info("Starting chat history sync")
         await orchestrator.sync_chat_history()
+    
+    # Synchronizacja komend slash z Discord
+    try:
+        synced = await bot.tree.sync()
+        logger.info("Slash commands synchronized", extra={"count": len(synced)})
+    except Exception as e:
+        logger.error("Failed to sync slash commands", exc_info=True)
 
 
 
@@ -179,6 +207,9 @@ async def add_activity(ctx, activity_type: str, distance: float,
             # Określ czy jest obciążenie > 5kg
             has_weight = weight is not None and weight > 5
             
+            # Stwórz timestamp jako int (zgodnie z formatem IID)
+            timestamp_int = int(ctx.message.created_at.timestamp())
+            
             saved = sheets_manager.add_activity(
                 username=username,
                 activity_type=activity_type,
@@ -186,7 +217,7 @@ async def add_activity(ctx, activity_type: str, distance: float,
                 has_weight=has_weight,
                 timestamp=None,
                 message_id=str(ctx.message.id),
-                message_timestamp=str(ctx.message.created_at.timestamp())
+                message_timestamp=str(timestamp_int)
             )
         except Exception as e:
             print(f"Błąd zapisu do Sheets: {e}")
@@ -484,6 +515,268 @@ async def activity_stats(ctx):
         await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"❌ Błąd podczas generowania statystyk aktywności: {e}")
+
+
+@bot.tree.command(name="podsumowanie", description="Generuje podsumowanie wyników z wybranego okresu z komentarzem AI")
+@app_commands.describe(okres="Wybierz okres do podsumowania")
+async def podsumowanie(
+    interaction: discord.Interaction,
+    okres: str
+):
+    """
+    Komenda slash generująca podsumowanie wyników z wybranego okresu.
+    
+    Args:
+        interaction: Interakcja Discord
+        okres: Wybrany okres (caly/tydzien/miesiac/ostatni_tydzien)
+    """
+    await interaction.response.defer(thinking=True)
+    
+    if not sheets_manager:
+        await interaction.followup.send("❌ Google Sheets nie jest skonfigurowany.")
+        return
+    
+    if not llm_client:
+        await interaction.followup.send("❌ AI Client nie jest skonfigurowany.")
+        return
+    
+    try:
+        # Pobierz wszystkie aktywności
+        all_activities = sheets_manager.get_all_activities_with_timestamps()
+        
+        if not all_activities:
+            await interaction.followup.send("📊 Brak danych do podsumowania.")
+            return
+        
+        # Filtruj dane według wybranego okresu
+        now = datetime.now()
+        filtered_activities = []
+        period_title = ""
+        
+        if okres == "caly":
+            filtered_activities = all_activities
+            period_title = "Cały konkurs"
+        elif okres == "ostatni_tydzien":
+            # Ostatni tydzień (niedziela-sobota)
+            days_since_sunday = (now.weekday() + 1) % 7
+            last_sunday = now - timedelta(days=days_since_sunday + 7)
+            last_saturday = last_sunday + timedelta(days=6)
+            
+            filtered_activities = [
+                a for a in all_activities
+                if last_sunday <= datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S") <= last_saturday
+            ]
+            period_title = f"Ostatni tydzień ({last_sunday.strftime('%d.%m')} - {last_saturday.strftime('%d.%m')})"
+        elif okres == "biezacy_tydzien":
+            # Bieżący tydzień (od niedzieli do dziś)
+            days_since_sunday = (now.weekday() + 1) % 7
+            this_sunday = now - timedelta(days=days_since_sunday)
+            
+            filtered_activities = [
+                a for a in all_activities
+                if datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S") >= this_sunday
+            ]
+            period_title = f"Bieżący tydzień (od {this_sunday.strftime('%d.%m')})"
+        elif okres == "miesiac":
+            # Ostatni miesiąc kalendarzowy
+            if now.month == 1:
+                last_month_year = now.year - 1
+                last_month = 12
+            else:
+                last_month_year = now.year
+                last_month = now.month - 1
+            
+            filtered_activities = [
+                a for a in all_activities
+                if datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S").month == last_month
+                and datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S").year == last_month_year
+            ]
+            
+            month_names = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", 
+                          "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
+            period_title = f"{month_names[last_month - 1]} {last_month_year}"
+        
+        if not filtered_activities:
+            await interaction.followup.send(f"📊 Brak danych dla okresu: {period_title}")
+            return
+        
+        # Oblicz statystyki
+        stats = _calculate_period_stats(filtered_activities)
+        
+        # Wygeneruj komentarz AI
+        ai_comment = await _generate_ai_summary(stats, period_title)
+        
+        # Utwórz embed
+        embed = discord.Embed(
+            title=f"📊 Podsumowanie: {period_title}",
+            description=ai_comment,
+            color=discord.Color.gold()
+        )
+        
+        # Dodaj pola statystyk
+        embed.add_field(
+            name="🏆 Najlepszy wynik",
+            value=f"**{stats['top_scorer']['nick']}** - {stats['top_scorer']['punkty']} pkt",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🏃 Najdłuższy bieg",
+            value=f"**{stats['longest_run']['nick']}** - {stats['longest_run']['dystans']} km ({stats['longest_run']['typ']})",
+            inline=False
+        )
+        
+        if stats.get('longest_swim'):
+            embed.add_field(
+                name="🏊 Najdłuższe pływanie",
+                value=f"**{stats['longest_swim']['nick']}** - {stats['longest_swim']['dystans']} km",
+                inline=False
+            )
+        
+        embed.add_field(
+            name="📈 Łączne statystyki",
+            value=(
+                f"Aktywności: **{stats['total_activities']}**\n"
+                f"Dystans: **{stats['total_distance']:.1f} km**\n"
+                f"Punkty: **{stats['total_points']}**"
+            ),
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👥 Aktywni uczestnicy",
+            value=f"**{stats['active_users']}** osób",
+            inline=True
+        )
+        
+        embed.set_footer(text=f"Wygenerowano: {now.strftime('%Y-%m-%d %H:%M')}")
+        
+        await interaction.followup.send(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Błąd generowania podsumowania: {e}")
+        await interaction.followup.send(f"❌ Wystąpił błąd: {e}")
+
+
+@podsumowanie.autocomplete('okres')
+async def okres_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[discord.app_commands.Choice[str]]:
+    """Autocomplete dla wyboru okresu."""
+    choices = [
+        discord.app_commands.Choice(name="Cały konkurs", value="caly"),
+        discord.app_commands.Choice(name="Bieżący tydzień (niedziela-dziś)", value="biezacy_tydzien"),
+        discord.app_commands.Choice(name="Ostatni tydzień (niedziela-sobota)", value="ostatni_tydzien"),
+        discord.app_commands.Choice(name="Ostatni miesiąc kalendarzowy", value="miesiac"),
+    ]
+    return choices
+
+
+def _calculate_period_stats(activities: list) -> dict:
+    """
+    Oblicza statystyki dla danego okresu.
+    
+    Args:
+        activities: Lista aktywności z arkusza
+        
+    Returns:
+        Słownik ze statystykami
+    """
+    from collections import defaultdict
+    
+    user_points = defaultdict(int)
+    user_activities = defaultdict(int)
+    longest_run = {'dystans': 0, 'nick': '', 'typ': ''}
+    longest_swim = {'dystans': 0, 'nick': ''}
+    total_distance = 0
+    total_points = 0
+    
+    for activity in activities:
+        nick = activity.get('Nick', 'Nieznany')
+        dystans = parse_distance(activity.get('Dystans (km)', 0))
+        punkty_str = activity.get('PUNKTY', '0')
+        punkty = safe_int(punkty_str)
+        typ = activity.get('Rodzaj Aktywności', '')
+        
+        # Suma punktów użytkownika
+        user_points[nick] += punkty
+        user_activities[nick] += 1
+        
+        # Łączne statystyki
+        total_distance += dystans
+        total_points += punkty
+        
+        # Najdłuższy bieg (Bieganie teren/bieżnia)
+        if 'bieganie' in typ.lower() and dystans > longest_run['dystans']:
+            longest_run = {'dystans': dystans, 'nick': nick, 'typ': typ}
+        
+        # Najdłuższe pływanie
+        if 'pływanie' in typ.lower() and dystans > longest_swim['dystans']:
+            longest_swim = {'dystans': dystans, 'nick': nick}
+    
+    # Top scorer
+    top_scorer_nick = max(user_points.items(), key=lambda x: x[1])[0] if user_points else ''
+    top_scorer_points = user_points[top_scorer_nick] if top_scorer_nick else 0
+    
+    return {
+        'top_scorer': {'nick': top_scorer_nick, 'punkty': top_scorer_points},
+        'longest_run': longest_run,
+        'longest_swim': longest_swim if longest_swim['dystans'] > 0 else None,
+        'total_activities': len(activities),
+        'total_distance': total_distance,
+        'total_points': total_points,
+        'active_users': len(user_points),
+        'user_points': dict(user_points),
+        'user_activities': dict(user_activities)
+    }
+
+
+async def _generate_ai_summary(stats: dict, period: str) -> str:
+    """
+    Generuje komentarz AI na podstawie statystyk.
+    
+    Args:
+        stats: Statystyki okresu
+        period: Nazwa okresu
+        
+    Returns:
+        Komentarz wygenerowany przez AI
+    """
+    try:
+        prompt = f"""Wygeneruj krótkie, motywujące podsumowanie aktywności sportowej dla okresu: {period}
+
+STATYSTYKI:
+- Łączna liczba aktywności: {stats['total_activities']}
+- Łączny dystans: {stats['total_distance']:.1f} km
+- Łączne punkty: {stats['total_points']}
+- Liczba aktywnych uczestników: {stats['active_users']}
+- Najlepszy wynik: {stats['top_scorer']['nick']} ({stats['top_scorer']['punkty']} pkt)
+- Najdłuższy bieg: {stats['longest_run']['nick']} ({stats['longest_run']['dystans']} km, {stats['longest_run']['typ']})
+{f"- Najdłuższe pływanie: {stats['longest_swim']['nick']} ({stats['longest_swim']['dystans']} km)" if stats.get('longest_swim') else ""}
+
+WYMAGANIA:
+1. Podsumowanie powinno być krótkie (2-4 zdania)
+2. Ton entuzjastyczny i motywujący
+3. Doceniaj osiągnięcia uczestników
+4. Zwróć uwagę na ciekawe fakty (np. największy dystans, najwięcej punktów)
+5. Użyj emoji dla emocji (max 2-3)
+6. NIE używaj markdown (bez **bold**, _italic_, itp.)
+
+Wygeneruj tylko tekst podsumowania, bez dodatkowych komentarzy."""
+
+        response = await llm_client.generate_text(prompt)
+        
+        if response:
+            # Usuń markdown formatting jeśli AI je dodało
+            response = response.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+            return response
+        
+        return f"Świetna robota! W okresie '{period}' zrealizowano {stats['total_activities']} aktywności na łączny dystans {stats['total_distance']:.1f} km! 🎉"
+        
+    except Exception as e:
+        print(f"❌ Błąd generowania komentarza AI: {e}")
+        return f"Imponujące wyniki w okresie '{period}'! Łącznie {stats['total_activities']} aktywności i {stats['total_points']} punktów! 💪"
 
 
 def main():

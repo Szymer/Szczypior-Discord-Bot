@@ -17,11 +17,15 @@ class ConfigManager:
         return cls._instance
 
     def __init__(self, config_path: str = 'config.json'):
-        if hasattr(self, '_initialized') and self._initialized:
+        if not hasattr(self, '_initialized'):
+            self._initialized = False
+
+        if self._initialized:
             return
         
         self.config_path = config_path
         self.config = self._load_config()
+        self._activity_keywords: Optional[Dict[str, list[str]]] = None
         self._initialized = True
         print("✅ ConfigManager zainicjalizowany.")
 
@@ -32,11 +36,36 @@ class ConfigManager:
             abs_config_path = os.path.join(project_root, self.config_path)
             
             with open(abs_config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                config = json.load(f)
+            
+            # Waliduj konfiguracj\u0119
+            self._validate_config(config)
+            return config
+            
         except FileNotFoundError as exc:
-            raise FileNotFoundError(f"Plik konfiguracyjny '{abs_config_path}' nie został znaleziony.") from exc
+            raise FileNotFoundError(f"Plik konfiguracyjny '{abs_config_path}' nie zosta\u0142 znaleziony.") from exc
         except json.JSONDecodeError as exc:
             raise ValueError(f"Plik konfiguracyjny '{abs_config_path}' jest niepoprawnym plikiem JSON.") from exc
+    
+    def _validate_config(self, config: Dict[str, Any]) -> None:
+        """Waliduje struktur\u0119 konfiguracji."""
+        required_keys = ['activity_keywords', 'llm_providers']
+        
+        for key in required_keys:
+            if key not in config:
+                raise ValueError(f"Brak wymaganego klucza '{key}' w config.json")
+        
+        # Sprawd\u017a czy s\u0105 skonfigurowane przynajmniej jedne LLM providers
+        if not config['llm_providers']:
+            raise ValueError("Brak konfiguracji LLM providers w config.json")
+        
+        # Sprawd\u017a czy domy\u015blny provider istnieje
+        default_provider = os.getenv("LLM_PROVIDER", "gemini").lower()
+        if default_provider not in config['llm_providers']:
+            raise ValueError(
+                f"Domy\u015blny provider '{default_provider}' nie jest skonfigurowany w config.json. "
+                f"Dost\u0119pni providerzy: {list(config['llm_providers'].keys())}"
+            )
 
     def get_llm_provider(self) -> str:
         """Pobiera nazwę dostawcy LLM ze zmiennych środowiskowych lub zwraca domyślną."""
@@ -120,6 +149,18 @@ class ConfigManager:
                 simplified_prompts[prompt_name] = prompt_data
         
         return simplified_prompts
+
+    def get_activity_keywords(self) -> Dict[str, list[str]]:
+        """Zwraca słownik słów kluczowych przypisanych do typów aktywności."""
+        if self._activity_keywords is None:
+            raw_keywords = self.config.get("activity_keywords", {})
+            # Upewnij się, że wartości są listami stringów
+            self._activity_keywords = {
+                activity: [str(keyword) for keyword in keywords]
+                for activity, keywords in raw_keywords.items()
+                if isinstance(keywords, list)
+            }
+        return self._activity_keywords
 
 # Utworzenie globalnej instancji, aby była łatwo dostępna w całej aplikacji
 config_manager = ConfigManager()

@@ -5,16 +5,20 @@ from typing import Optional, Union, List, Dict, Any
 from functools import wraps
 
 
-def get_display_name(user: discord.User) -> str:
+def get_display_name(user: Union[discord.User, discord.Member]) -> str:
     """
-    Pobiera wyświetlaną nazwę użytkownika (global_name lub username).
+    Pobiera wyświetlaną nazwę użytkownika (display_name uwzględnia nick/alias na serwerze).
     
     Args:
-        user: Obiekt użytkownika Discord
+        user: Obiekt użytkownika Discord (User lub Member)
         
     Returns:
-        Wyświetlana nazwa użytkownika
+        Wyświetlana nazwa użytkownika (nick jeśli ustawiony, inaczej global_name lub username)
     """
+    # Member ma display_name który uwzględnia nick (alias) na serwerze
+    if hasattr(user, 'display_name'):
+        return user.display_name
+    # Fallback dla User (bez kontekstu serwera)
     return user.global_name if user.global_name else str(user)
 
 
@@ -182,12 +186,14 @@ def handle_sheets_error(func):
         try:
             # Sprawdź czy sheets_manager istnieje w kontekście
             bot = ctx.bot
-            if not hasattr(bot, '_sheets_manager') or bot._sheets_manager is None:
+            if not hasattr(bot, 'sheets_manager') or bot.sheets_manager is None:
                 await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
                 return None
             return await func(ctx, *args, **kwargs)
         except Exception as e:
-            print(f"Błąd w {func.__name__}: {e}")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in {func.__name__}", exc_info=True)
             await ctx.send(f"❌ Wystąpił błąd podczas wykonywania komendy: {e}")
             return None
     return wrapper

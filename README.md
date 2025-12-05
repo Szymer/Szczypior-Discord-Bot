@@ -45,6 +45,26 @@ cp .env.example .env
 DISCORD_TOKEN=twój_token_tutaj
 ```
 
+## 🔐 Konfiguracja Uprawnień Bota
+
+Bot wymaga następujących uprawnień Discord:
+
+### **Wymagane uprawnienia:**
+- ✅ **View Channels** - Wyświetlanie kanałów
+- ✅ **Send Messages** - Wysyłanie wiadomości
+- ✅ **Read Message History** - Odczyt historii wiadomości (do synchronizacji)
+- ✅ **Add Reactions** - Dodawanie reakcji
+- ✅ **Embed Links** - Osadzanie linków
+- ✅ **Attach Files** - Załączanie plików
+
+### **Link zaproszenia z uprawnieniami:**
+```
+https://discord.com/api/oauth2/authorize?client_id=TWOJE_CLIENT_ID&permissions=19520&scope=bot
+```
+Zastąp `TWOJE_CLIENT_ID` ID swojej aplikacji z Discord Developer Portal.
+
+⚠️ **Jeśli bot wyświetla błąd "Missing Access"**, sprawdź przewodnik: [DISCORD_PERMISSIONS_FIX.md](DISCORD_PERMISSIONS_FIX.md)
+
 ## 🎮 Uruchomienie
 
 ```bash

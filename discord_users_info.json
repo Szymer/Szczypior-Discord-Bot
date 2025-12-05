@@ -1,0 +1,1184 @@
+[
+  {
+    "guild_name": "Serwer kwarantannowy",
+    "guild_id": "504737667217489960",
+    "member_count": 3,
+    "members": [
+      {
+        "user_id": "504737235472613378",
+        "username": ".szymer222",
+        "discriminator": "0",
+        "global_name": "Szymer",
+        "display_name": "Szymer",
+        "nick": null,
+        "server_display_name": "Szymer",
+        "is_bot": false,
+        "joined_at": "2018-10-24T19:27:17.442000+00:00",
+        "created_at": "2018-10-24T19:25:34.501000+00:00",
+        "roles": [],
+        "avatar_url": "https://cdn.discordapp.com/avatars/504737235472613378/29d7b48c6249c18fe5bd4d4b28d5aa82.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "873175966254506016",
+        "username": "swiniabojowa92",
+        "discriminator": "0",
+        "global_name": "swiniabojowa92",
+        "display_name": "swiniabojowa92",
+        "nick": null,
+        "server_display_name": "swiniabojowa92",
+        "is_bot": false,
+        "joined_at": "2023-01-04T18:23:59.089000+00:00",
+        "created_at": "2021-08-06T12:09:33.180000+00:00",
+        "roles": [],
+        "avatar_url": "https://cdn.discordapp.com/avatars/873175966254506016/25d25e0764e1f01c43022ba2c302a2d2.png?size=1024",
+        "guild_avatar_url": null
+      }
+    ]
+  },
+  {
+    "guild_name": "DeltaOnion",
+    "guild_id": "707179187869581343",
+    "member_count": 55,
+    "members": [
+      {
+        "user_id": "669503548366651423",
+        "username": "kacz_orek",
+        "discriminator": "0",
+        "global_name": "Adaś",
+        "display_name": "Kaczorek [Delta Onion]",
+        "nick": "Kaczorek [Delta Onion]",
+        "server_display_name": "Kaczorek [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-08-22T19:33:03.896000+00:00",
+        "created_at": "2020-01-22T11:28:04.705000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/669503548366651423/05444c77cbee19c36edb0fdc85b64fbc.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "539896870739116034",
+        "username": "rudyyy2155",
+        "discriminator": "0",
+        "global_name": "Rudy (DGA Werewolf)",
+        "display_name": "RUDY [DGA Werewolf]",
+        "nick": "RUDY [DGA Werewolf]",
+        "server_display_name": "RUDY [DGA Werewolf]",
+        "is_bot": false,
+        "joined_at": "2023-09-12T08:43:43.329000+00:00",
+        "created_at": "2019-01-29T19:57:24.783000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "537992670648467457",
+        "username": "anko1244",
+        "discriminator": "0",
+        "global_name": null,
+        "display_name": "anko1244 [Task Force Sigma]",
+        "nick": "anko1244 [Task Force Sigma]",
+        "server_display_name": "anko1244 [Task Force Sigma]",
+        "is_bot": false,
+        "joined_at": "2025-06-12T18:33:46.673000+00:00",
+        "created_at": "2019-01-24T13:50:48.103000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/537992670648467457/e818f970060976ab95c5164aa50e27ab.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "425354713912049674",
+        "username": "marc3l",
+        "discriminator": "0",
+        "global_name": "Marc3l",
+        "display_name": "Furas [Night Walkers]",
+        "nick": "Furas [Night Walkers]",
+        "server_display_name": "Furas [Night Walkers]",
+        "is_bot": false,
+        "joined_at": "2023-08-24T19:15:34.376000+00:00",
+        "created_at": "2018-03-19T18:07:46.505000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/425354713912049674/5633c52c1a6480935b1a2bad8af0ff8f.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "289157259953438720",
+        "username": "froggsu",
+        "discriminator": "0",
+        "global_name": "Froxy",
+        "display_name": "Froxy [Delta Onion]",
+        "nick": "Froxy [Delta Onion]",
+        "server_display_name": "Froxy [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2025-08-20T08:37:28.901000+00:00",
+        "created_at": "2017-03-08T22:07:43.055000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/289157259953438720/840fda911083cbbdffb6732893933714.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "518855344873668608",
+        "username": "samael16",
+        "discriminator": "0",
+        "global_name": "Samael",
+        "display_name": "Samael [SPEAR]",
+        "nick": "Samael [SPEAR]",
+        "server_display_name": "Samael [SPEAR]",
+        "is_bot": false,
+        "joined_at": "2023-09-05T09:42:06.364000+00:00",
+        "created_at": "2018-12-02T18:25:54.084000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/518855344873668608/261a12b377ff5095189efb4085033238.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "230769747904561152",
+        "username": "zzygmunt",
+        "discriminator": "0",
+        "global_name": "Zygmunt [DGA Werewolf] 🐺",
+        "display_name": "Zygmunt [DGA Werewolf]",
+        "nick": "Zygmunt [DGA Werewolf]",
+        "server_display_name": "Zygmunt [DGA Werewolf]",
+        "is_bot": false,
+        "joined_at": "2023-11-14T03:40:16.853000+00:00",
+        "created_at": "2016-09-28T19:16:35.395000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/230769747904561152/d8d0cf979a0ea4220a1ea7104b9cc40e.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "314810311867629578",
+        "username": "lokoszoko",
+        "discriminator": "0",
+        "global_name": "Loko",
+        "display_name": "Loko [Delta Onion]",
+        "nick": "Loko [Delta Onion]",
+        "server_display_name": "Loko [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-07-25T14:14:31.485000+00:00",
+        "created_at": "2017-05-18T17:03:47.242000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/314810311867629578/a63510834059c05291aea511a0e02c95.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "278241959750008833",
+        "username": "adhd0441",
+        "discriminator": "0",
+        "global_name": "Adhd",
+        "display_name": "ADHD [SPEAR]",
+        "nick": "ADHD [SPEAR]",
+        "server_display_name": "ADHD [SPEAR]",
+        "is_bot": false,
+        "joined_at": "2023-11-13T19:37:50.959000+00:00",
+        "created_at": "2017-02-06T19:14:12.690000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/278241959750008833/f968a209d52827bc1f2806626bc4e052.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "757317294392213727",
+        "username": "szczgl",
+        "discriminator": "0",
+        "global_name": "dziadek",
+        "display_name": "Dziadek [Task Force Sigma]",
+        "nick": "Dziadek [Task Force Sigma]",
+        "server_display_name": "Dziadek [Task Force Sigma]",
+        "is_bot": false,
+        "joined_at": "2025-07-05T15:24:23.417000+00:00",
+        "created_at": "2020-09-20T19:08:33.258000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "316960888324096001",
+        "username": "jukonn",
+        "discriminator": "0",
+        "global_name": "Jukonn",
+        "display_name": "Volt",
+        "nick": "Volt",
+        "server_display_name": "Volt",
+        "is_bot": false,
+        "joined_at": "2020-05-05T11:20:13.694000+00:00",
+        "created_at": "2017-05-24T15:29:24.625000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          },
+          {
+            "name": "admin",
+            "id": "959023423181438986",
+            "color": "#3498db"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "1158771211388588182",
+        "username": "carlos_asg",
+        "discriminator": "0",
+        "global_name": "Carlos",
+        "display_name": "Carlos [Delta Onion]",
+        "nick": "Carlos [Delta Onion]",
+        "server_display_name": "Carlos [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2024-03-04T02:39:22.416000+00:00",
+        "created_at": "2023-10-03T14:23:05.723000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/1158771211388588182/214d7eed21673db766c3675aa51be40e.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "364797557710389248",
+        "username": "scribbler0017",
+        "discriminator": "0",
+        "global_name": null,
+        "display_name": "Fob [DGA Werewolf]",
+        "nick": "Fob [DGA Werewolf]",
+        "server_display_name": "Fob [DGA Werewolf]",
+        "is_bot": false,
+        "joined_at": "2024-07-07T16:58:57.445000+00:00",
+        "created_at": "2017-10-03T15:35:15.369000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/364797557710389248/ac704dc1ce5126330a8c5aa2c155df64.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "504737235472613378",
+        "username": ".szymer222",
+        "discriminator": "0",
+        "global_name": "Szymer",
+        "display_name": "Szymer[KPSK]",
+        "nick": "Szymer[KPSK]",
+        "server_display_name": "Szymer[KPSK]",
+        "is_bot": false,
+        "joined_at": "2023-09-05T08:51:07.691000+00:00",
+        "created_at": "2018-10-24T19:25:34.501000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/504737235472613378/29d7b48c6249c18fe5bd4d4b28d5aa82.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "207898017632747521",
+        "username": "maniek5816",
+        "discriminator": "0",
+        "global_name": "Meiniak",
+        "display_name": "Meiniak [ATM KOSA]",
+        "nick": "Meiniak [ATM KOSA]",
+        "server_display_name": "Meiniak [ATM KOSA]",
+        "is_bot": false,
+        "joined_at": "2025-10-17T20:40:34.717000+00:00",
+        "created_at": "2016-07-27T16:32:29.962000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "462905325352124416",
+        "username": "bogus_92",
+        "discriminator": "0",
+        "global_name": null,
+        "display_name": "Boguś [Delta Onion]",
+        "nick": "Boguś [Delta Onion]",
+        "server_display_name": "Boguś [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-07-25T17:49:21.103000+00:00",
+        "created_at": "2018-07-01T09:00:29.929000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/462905325352124416/8284a138fed624036776db792a935652.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "465874725017485342",
+        "username": "misratu",
+        "discriminator": "0",
+        "global_name": "MISRATU",
+        "display_name": "Misiek [TKS]",
+        "nick": "Misiek [TKS]",
+        "server_display_name": "Misiek [TKS]",
+        "is_bot": false,
+        "joined_at": "2024-10-20T15:25:30.216000+00:00",
+        "created_at": "2018-07-09T13:39:49.978000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/465874725017485342/68b0d9b7f261ac7941023eb7e7c63612.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "452378645617573888",
+        "username": "jakub1720",
+        "discriminator": "0",
+        "global_name": "Jakub",
+        "display_name": "Major [Delta Onion]",
+        "nick": "Major [Delta Onion]",
+        "server_display_name": "Major [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-11-13T12:06:34.359000+00:00",
+        "created_at": "2018-06-02T07:51:13.904000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/452378645617573888/14bf29981b02c6a3f27b35c317b5875b.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "497455560598224936",
+        "username": "_adeptusastartes",
+        "discriminator": "0",
+        "global_name": "Umaf",
+        "display_name": "Alvaro [Delta Onion]",
+        "nick": "Alvaro [Delta Onion]",
+        "server_display_name": "Alvaro [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-09-09T17:04:36.571000+00:00",
+        "created_at": "2018-10-04T17:10:47.924000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/497455560598224936/6cc8b79d3048b6464d1cfa9adf6b15b4.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "255413208544706563",
+        "username": "00jor_",
+        "discriminator": "0",
+        "global_name": "barney",
+        "display_name": "barney [BDG]",
+        "nick": "barney [BDG]",
+        "server_display_name": "barney [BDG]",
+        "is_bot": false,
+        "joined_at": "2025-11-02T22:12:44.229000+00:00",
+        "created_at": "2016-12-05T19:20:54.265000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/255413208544706563/0354233841e2c68d6d25cb7e49234b15.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "690967608308269076",
+        "username": "proton_kilo",
+        "discriminator": "0",
+        "global_name": null,
+        "display_name": "Paka",
+        "nick": "Paka",
+        "server_display_name": "Paka",
+        "is_bot": false,
+        "joined_at": "2025-06-01T20:28:05.294000+00:00",
+        "created_at": "2020-03-21T16:58:35.378000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/690967608308269076/6f5fb5d529d3ffa07a976e6a40bed1bb.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "613422714308395177",
+        "username": "sarna9737",
+        "discriminator": "0",
+        "global_name": "Sarna",
+        "display_name": "Sarna [CKSW]",
+        "nick": "Sarna [CKSW]",
+        "server_display_name": "Sarna [CKSW]",
+        "is_bot": false,
+        "joined_at": "2025-07-07T17:28:17.695000+00:00",
+        "created_at": "2019-08-20T17:22:51.934000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/613422714308395177/e565b97c1b63612a7e9cf4106db564f7.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "684385948175433755",
+        "username": "rybosomiczny",
+        "discriminator": "0",
+        "global_name": "rybosomiczny",
+        "display_name": "adi",
+        "nick": "adi",
+        "server_display_name": "adi",
+        "is_bot": false,
+        "joined_at": "2020-05-05T11:01:53.386000+00:00",
+        "created_at": "2020-03-03T13:05:25.321000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          },
+          {
+            "name": "admin",
+            "id": "959023423181438986",
+            "color": "#3498db"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/684385948175433755/785334a65b9aeb0bcb57a1bb39040ac8.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "659809921314979870",
+        "username": "albatros_bdg",
+        "discriminator": "0",
+        "global_name": "Albatros",
+        "display_name": "Albatros",
+        "nick": null,
+        "server_display_name": "Albatros",
+        "is_bot": false,
+        "joined_at": "2025-11-14T14:30:28.574000+00:00",
+        "created_at": "2019-12-26T17:29:03.917000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/659809921314979870/074cda2e28d0254d8a4dbb4127514d91.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "766328574826512434",
+        "username": "pureevilpl",
+        "discriminator": "0",
+        "global_name": "PureEvilPL (Ronin)",
+        "display_name": "[KPSK] Ronin",
+        "nick": "[KPSK] Ronin",
+        "server_display_name": "[KPSK] Ronin",
+        "is_bot": false,
+        "joined_at": "2023-09-05T10:20:46.385000+00:00",
+        "created_at": "2020-10-15T15:56:09.935000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/766328574826512434/a41f0989ff3c63edf47cd5138536924f.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "1268973051991691337",
+        "username": "jacob_mielec",
+        "discriminator": "0",
+        "global_name": "Jacob",
+        "display_name": "Jacob",
+        "nick": null,
+        "server_display_name": "Jacob",
+        "is_bot": false,
+        "joined_at": "2025-01-19T13:57:44.485000+00:00",
+        "created_at": "2024-08-02T16:45:51.974000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/1268973051991691337/fe5bab2c72df56e2e10a9f231191e90f.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "674351610297581586",
+        "username": "miiiiron.",
+        "discriminator": "0",
+        "global_name": "Lima",
+        "display_name": "Lima [Delta Onion]",
+        "nick": "Lima [Delta Onion]",
+        "server_display_name": "Lima [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-07-25T20:33:24.210000+00:00",
+        "created_at": "2020-02-04T20:32:32.742000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/674351610297581586/3c5ebcf3d0441c0bcd245a0bf4dd7298.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "454023999135940619",
+        "username": "vektorvi",
+        "discriminator": "0",
+        "global_name": "Vektor",
+        "display_name": "Vektor [Task Force Sigma]",
+        "nick": "Vektor [Task Force Sigma]",
+        "server_display_name": "Vektor [Task Force Sigma]",
+        "is_bot": false,
+        "joined_at": "2025-06-12T17:30:27.535000+00:00",
+        "created_at": "2018-06-06T20:49:16.752000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/454023999135940619/8cbaf487513cb6add23aa2f9201b209f.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "895026444093251585",
+        "username": "keisim1983",
+        "discriminator": "0",
+        "global_name": "Czarny",
+        "display_name": "Czarny",
+        "nick": null,
+        "server_display_name": "Czarny",
+        "is_bot": false,
+        "joined_at": "2024-07-07T17:09:07.392000+00:00",
+        "created_at": "2021-10-05T19:15:33.059000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/895026444093251585/0bd2c793ff1fe07714431c97c17f9435.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "516693321012216028",
+        "username": "petarda5",
+        "discriminator": "0",
+        "global_name": "Dawid",
+        "display_name": "Dawid",
+        "nick": null,
+        "server_display_name": "Dawid",
+        "is_bot": false,
+        "joined_at": "2023-07-26T17:59:52.472000+00:00",
+        "created_at": "2018-11-26T19:14:47.427000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/516693321012216028/705e0e96500a56e9ad2169b6ba9c7b13.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "833795367970930689",
+        "username": "mateo0327",
+        "discriminator": "0",
+        "global_name": "Mateo",
+        "display_name": "Mateo [DGA Werewolf]",
+        "nick": "Mateo [DGA Werewolf]",
+        "server_display_name": "Mateo [DGA Werewolf]",
+        "is_bot": false,
+        "joined_at": "2023-07-26T17:58:30.317000+00:00",
+        "created_at": "2021-04-19T20:05:06.893000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/833795367970930689/da8b1b52d28f37f71a6abfdfb9ed7c9b.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "498371669350416397",
+        "username": "moziin",
+        "discriminator": "0",
+        "global_name": "MoZIIN",
+        "display_name": "MoZIIN [Delta Onion]",
+        "nick": "MoZIIN [Delta Onion]",
+        "server_display_name": "MoZIIN [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-11-18T18:46:30.231000+00:00",
+        "created_at": "2018-10-07T05:51:05.271000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/498371669350416397/7ff4d963cab7cb9b7bdd4b10bfa4c7e7.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "1303136057688330301",
+        "username": "filip7806",
+        "discriminator": "0",
+        "global_name": "Filip",
+        "display_name": "Filip [Polish Eagles]",
+        "nick": "Filip [Polish Eagles]",
+        "server_display_name": "Filip [Polish Eagles]",
+        "is_bot": false,
+        "joined_at": "2024-11-04T23:21:50.051000+00:00",
+        "created_at": "2024-11-04T23:17:27.250000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/1303136057688330301/6c5996770c985bcd6e5b68131ff2ba04.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "155618975726829568",
+        "username": "gokens",
+        "discriminator": "0",
+        "global_name": "GOKU",
+        "display_name": "Gokens [-]",
+        "nick": "Gokens [-]",
+        "server_display_name": "Gokens [-]",
+        "is_bot": false,
+        "joined_at": "2025-11-02T22:13:29.127000+00:00",
+        "created_at": "2016-03-05T10:14:15.074000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/155618975726829568/b8664ceffbdb23ecdef8a21b079b9e73.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "518851001172754432",
+        "username": "nick939673",
+        "discriminator": "0",
+        "global_name": "Kiki",
+        "display_name": "Kiki",
+        "nick": null,
+        "server_display_name": "Kiki",
+        "is_bot": false,
+        "joined_at": "2025-11-02T22:12:21.671000+00:00",
+        "created_at": "2018-12-02T18:08:38.465000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "359372950539075585",
+        "username": "johnnie144",
+        "discriminator": "0",
+        "global_name": "Janek",
+        "display_name": "Janek [Delta Onion]",
+        "nick": "Janek [Delta Onion]",
+        "server_display_name": "Janek [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-08-24T20:53:14.982000+00:00",
+        "created_at": "2017-09-18T16:19:48.235000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/359372950539075585/23a097f4f5732d3da24627c218c46af9.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "392361757382934529",
+        "username": "herc112",
+        "discriminator": "0",
+        "global_name": null,
+        "display_name": "Herc [BORKI]",
+        "nick": "Herc [BORKI]",
+        "server_display_name": "Herc [BORKI]",
+        "is_bot": false,
+        "joined_at": "2023-08-22T11:43:39.024000+00:00",
+        "created_at": "2017-12-18T17:05:32.689000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/392361757382934529/44f89e03e7ba7d80afb7cec5d5794e42.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "707183919061270579",
+        "username": "suszi_g",
+        "discriminator": "0",
+        "global_name": "suszi",
+        "display_name": "Suszi",
+        "nick": "Suszi",
+        "server_display_name": "Suszi",
+        "is_bot": false,
+        "joined_at": "2020-05-05T10:59:25.644000+00:00",
+        "created_at": "2020-05-05T10:56:25.146000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          },
+          {
+            "name": "admin",
+            "id": "959023423181438986",
+            "color": "#3498db"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/707183919061270579/047968959abf0e893259f3fc26243034.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "694301452130320465",
+        "username": "burda_",
+        "discriminator": "0",
+        "global_name": "kuba",
+        "display_name": "kuba",
+        "nick": null,
+        "server_display_name": "kuba",
+        "is_bot": false,
+        "joined_at": "2024-09-03T14:32:29.256000+00:00",
+        "created_at": "2020-03-30T21:46:05.685000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "762664319841861642",
+        "username": ".azgad",
+        "discriminator": "0",
+        "global_name": "Azgad",
+        "display_name": "Azgad [Task Force Sigma]",
+        "nick": "Azgad [Task Force Sigma]",
+        "server_display_name": "Azgad [Task Force Sigma]",
+        "is_bot": false,
+        "joined_at": "2024-02-21T14:10:46.765000+00:00",
+        "created_at": "2020-10-05T13:15:43.468000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "1246878158423330907",
+        "username": "foka0673p_60837",
+        "discriminator": "0",
+        "global_name": "Foka",
+        "display_name": "Foka [DGA Werewolf]",
+        "nick": "Foka [DGA Werewolf]",
+        "server_display_name": "Foka [DGA Werewolf]",
+        "is_bot": false,
+        "joined_at": "2024-07-07T17:03:31.500000+00:00",
+        "created_at": "2024-06-02T17:28:38.844000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/1246878158423330907/f7f2e9361e8a54ce6e72580ac7b967af.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "530869668081041418",
+        "username": "zulian_",
+        "discriminator": "0",
+        "global_name": "Żuljan",
+        "display_name": "Żuljan [Polish Eagles]",
+        "nick": "Żuljan [Polish Eagles]",
+        "server_display_name": "Żuljan [Polish Eagles]",
+        "is_bot": false,
+        "joined_at": "2024-11-05T05:52:24.277000+00:00",
+        "created_at": "2019-01-04T22:06:31.952000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/530869668081041418/347c21fc04bd04b14749187559b53cbf.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "280532961491681281",
+        "username": "cichylis",
+        "discriminator": "0",
+        "global_name": "cichy🦊",
+        "display_name": "Cichy🦊 [TKS]",
+        "nick": "Cichy🦊 [TKS]",
+        "server_display_name": "Cichy🦊 [TKS]",
+        "is_bot": false,
+        "joined_at": "2024-10-17T20:15:29.618000+00:00",
+        "created_at": "2017-02-13T02:57:50.070000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/280532961491681281/e497615c2793b7783f281cf4fbd046df.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "755037129889021983",
+        "username": ".ziemniaczki",
+        "discriminator": "0",
+        "global_name": "ziemniaczki",
+        "display_name": "ziemniaczki",
+        "nick": null,
+        "server_display_name": "ziemniaczki",
+        "is_bot": false,
+        "joined_at": "2024-06-25T06:53:27.238000+00:00",
+        "created_at": "2020-09-14T12:07:59.677000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/755037129889021983/170f9baab72dd072947100304bf8139f.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "418148053296480298",
+        "username": "volvorines",
+        "discriminator": "0",
+        "global_name": "volvorines",
+        "display_name": "Traktur [Delta Onion]",
+        "nick": "Traktur [Delta Onion]",
+        "server_display_name": "Traktur [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2020-11-20T21:44:24.651000+00:00",
+        "created_at": "2018-02-27T20:51:04.721000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          },
+          {
+            "name": "admin",
+            "id": "959023423181438986",
+            "color": "#3498db"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/418148053296480298/a31f8ec85dd87a4af6481ca68eb531e4.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "1084186896592289955",
+        "username": "barteyk",
+        "discriminator": "0",
+        "global_name": "[Delta onion] Bart",
+        "display_name": "Bart [DUBRIFLE]",
+        "nick": "Bart [DUBRIFLE]",
+        "server_display_name": "Bart [DUBRIFLE]",
+        "is_bot": false,
+        "joined_at": "2024-07-21T16:04:32.126000+00:00",
+        "created_at": "2023-03-11T18:51:39.366000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/1084186896592289955/f70497246e80d1bcbb96c6080de0b7f6.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "1413536740563488839",
+        "username": "antontalib",
+        "discriminator": "0",
+        "global_name": "Talib [SALO SQUAD]",
+        "display_name": "Talib [SALO SQUAD]",
+        "nick": null,
+        "server_display_name": "Talib [SALO SQUAD]",
+        "is_bot": false,
+        "joined_at": "2025-11-11T14:58:39.220000+00:00",
+        "created_at": "2025-09-05T14:50:21.193000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/1413536740563488839/edbbe6ccc287d2ad47a3524836fc960b.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "330802769298718720",
+        "username": ".blade37",
+        "discriminator": "0",
+        "global_name": "Blade37",
+        "display_name": "Blade [M.O.R.S]",
+        "nick": "Blade [M.O.R.S]",
+        "server_display_name": "Blade [M.O.R.S]",
+        "is_bot": false,
+        "joined_at": "2025-07-08T10:50:21.921000+00:00",
+        "created_at": "2017-07-01T20:12:06.219000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/330802769298718720/5d8da12eedc7a3adb955f05abee275f7.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "550012801780023299",
+        "username": "abselo",
+        "discriminator": "0",
+        "global_name": "Abselo",
+        "display_name": "Abselo [Task Force Sigma]",
+        "nick": "Abselo [Task Force Sigma]",
+        "server_display_name": "Abselo [Task Force Sigma]",
+        "is_bot": false,
+        "joined_at": "2023-08-22T10:14:55.494000+00:00",
+        "created_at": "2019-02-26T17:54:30.688000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/550012801780023299/b854f20c188f4827f8eb5bb3d67e69a3.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "687295669622407208",
+        "username": "szturmann",
+        "discriminator": "0",
+        "global_name": "Szturman",
+        "display_name": "Szturman",
+        "nick": null,
+        "server_display_name": "Szturman",
+        "is_bot": false,
+        "joined_at": "2025-07-08T11:45:32.916000+00:00",
+        "created_at": "2020-03-11T13:47:36.974000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/687295669622407208/00f13a3d5d4c50b9b3f0ea6f6c6348e4.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "466291204708106240",
+        "username": "asagus",
+        "discriminator": "0",
+        "global_name": "Asagus",
+        "display_name": "Amper [Delta Onion]",
+        "nick": "Amper [Delta Onion]",
+        "server_display_name": "Amper [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2020-05-05T10:55:10.631000+00:00",
+        "created_at": "2018-07-10T17:14:46.474000+00:00",
+        "roles": [
+          {
+            "name": "Cebula",
+            "id": "1143080766121725993",
+            "color": "#f1c40f"
+          },
+          {
+            "name": "admin",
+            "id": "959023423181438986",
+            "color": "#3498db"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/466291204708106240/0b544825c6ddfbce41cf570cbb091733.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "670044209067196419",
+        "username": "bogol1",
+        "discriminator": "0",
+        "global_name": "BOGOL (BAWEL)",
+        "display_name": "BOGOL [Delta Onion]",
+        "nick": "BOGOL [Delta Onion]",
+        "server_display_name": "BOGOL [Delta Onion]",
+        "is_bot": false,
+        "joined_at": "2023-07-26T18:23:33.387000+00:00",
+        "created_at": "2020-01-23T23:16:28.261000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": "https://cdn.discordapp.com/avatars/670044209067196419/3a5be45da260dc0b9ba05a31da5f3be2.png?size=1024",
+        "guild_avatar_url": null
+      },
+      {
+        "user_id": "838882598104334366",
+        "username": "oldispear",
+        "discriminator": "0",
+        "global_name": "OLDI",
+        "display_name": "OLDI [SPEAR]",
+        "nick": "OLDI [SPEAR]",
+        "server_display_name": "OLDI [SPEAR]",
+        "is_bot": false,
+        "joined_at": "2024-07-07T17:09:02.618000+00:00",
+        "created_at": "2021-05-03T20:59:57.073000+00:00",
+        "roles": [
+          {
+            "name": "Sympatyk",
+            "id": "1143081491799216199",
+            "color": "#2ecc71"
+          }
+        ],
+        "avatar_url": null,
+        "guild_avatar_url": null
+      }
+    ]
+  }
+]
