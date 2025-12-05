@@ -1,6 +1,7 @@
 """Testy podstawowych funkcji bota."""
 
 import pytest
+
 from bot import __version__
 
 
@@ -13,6 +14,7 @@ def test_bot_imports():
     """Sprawdza czy główne moduły można zaimportować."""
     try:
         from bot import main
+
         assert True
     except ImportError:
         pytest.fail("Nie można zaimportować modułu bot.main")

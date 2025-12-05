@@ -4,51 +4,51 @@
 # Typy aktywności i ich punktacja bazowa (zgodnie z wytycznymi konkursu)
 ACTIVITY_TYPES = {
     "bieganie_teren": {
-        "emoji": "🏃", 
-        "base_points": 1000, 
+        "emoji": "🏃",
+        "base_points": 1000,
         "unit": "km",
         "min_distance": 0,
         "bonuses": ["obciążenie", "przewyższenie"],
-        "display_name": "Bieganie (Teren)"
+        "display_name": "Bieganie (Teren)",
     },
     "bieganie_bieznia": {
-        "emoji": "🏃‍♂️", 
-        "base_points": 800, 
+        "emoji": "🏃‍♂️",
+        "base_points": 800,
         "unit": "km",
         "min_distance": 0,
         "bonuses": ["obciążenie"],
-        "display_name": "Bieganie (Bieżnia)"
+        "display_name": "Bieganie (Bieżnia)",
     },
     "plywanie": {
-        "emoji": "🏊", 
-        "base_points": 4000, 
+        "emoji": "🏊",
+        "base_points": 4000,
         "unit": "km",
         "min_distance": 0,
         "bonuses": [],
-        "display_name": "Pływanie"
+        "display_name": "Pływanie",
     },
     "rower": {
-        "emoji": "🚴", 
-        "base_points": 300, 
+        "emoji": "🚴",
+        "base_points": 300,
         "unit": "km",
         "min_distance": 6,
         "bonuses": ["przewyższenie"],
-        "display_name": "Rower/Rolki"
+        "display_name": "Rower/Rolki",
     },
     "spacer": {
-        "emoji": "🚶", 
-        "base_points": 200, 
+        "emoji": "🚶",
+        "base_points": 200,
         "unit": "km",
         "min_distance": 3,
         "bonuses": ["obciążenie", "przewyższenie"],
-        "display_name": "Spacer/Trekking"
+        "display_name": "Spacer/Trekking",
     },
     "cardio": {
-        "emoji": "🔫", 
-        "base_points": 800, 
+        "emoji": "🔫",
+        "base_points": 800,
         "unit": "km",
         "min_distance": 0,
         "bonuses": ["obciążenie", "przewyższenie"],
-        "display_name": "Inne Cardio (wioślarz, orbitrek, ASG)"
+        "display_name": "Inne Cardio (wioślarz, orbitrek, ASG)",
     },
 }
