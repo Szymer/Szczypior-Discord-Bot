@@ -1,14 +1,11 @@
 #!/bin/sh
 
-# Utwórz plik authorized_user.json ze zmiennej środowiskowej
-if [ -n "$GOOGLE_CREDENTIALS" ]; then
-    printf '%s' "$GOOGLE_CREDENTIALS" > /app/authorized_user.json
-    echo "✅ Created authorized_user.json from environment variable"
-    echo "🔍 First 100 chars of file:"
-    head -c 100 /app/authorized_user.json
-    echo ""
+# Utwórz plik service_account.json ze zmiennej środowiskowej (opcjonalnie)
+# Preferujemy używanie zmiennej GOOGLE_SERVICE_ACCOUNT bezpośrednio
+if [ -n "$GOOGLE_SERVICE_ACCOUNT" ]; then
+    echo "✅ GOOGLE_SERVICE_ACCOUNT environment variable is set"
 else
-    echo "⚠️  GOOGLE_CREDENTIALS not set - Google Sheets will not work"
+    echo "⚠️  GOOGLE_SERVICE_ACCOUNT not set - Google Sheets will not work"
 fi
 
 # Uruchom bota

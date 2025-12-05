@@ -1,12 +1,13 @@
 """Moduł do obsługi Google Sheets."""
 
+import json
 import logging
 import os
 from datetime import datetime
 from typing import Dict, List, Optional
 
 import gspread
-from google.oauth2.credentials import Credentials
+from google.oauth2.service_account import Credentials
 
 from .utils import parse_distance
 
@@ -25,27 +26,44 @@ class SheetsManager:
         self._authorize()
 
     def _authorize(self):
-        """Autoryzacja z Google Sheets używając OAuth."""
+        """Autoryzacja z Google Sheets używając Service Account."""
         try:
-            # Znajdź absolutną ścieżkę do roota projektu
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-            creds_path = os.path.join(project_root, "authorized_user.json")
-
-            if not os.path.exists(creds_path):
-                raise FileNotFoundError(
-                    "Brak pliku authorized_user.json. "
-                    "Uruchom `python setup_google_auth.py` w głównym folderze."
+            # Sprawdź czy są dane Service Account w zmiennej środowiskowej
+            service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT")
+            
+            if service_account_json:
+                # Użyj Service Account z zmiennej środowiskowej
+                service_account_info = json.loads(service_account_json)
+                creds = Credentials.from_service_account_info(
+                    service_account_info,
+                    scopes=[
+                        "https://www.googleapis.com/auth/spreadsheets",
+                        "https://www.googleapis.com/auth/drive.file",
+                    ],
                 )
+                logger.info("Authorized via Service Account (from env)")
+            else:
+                # Fallback: szukaj pliku service_account.json
+                project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                creds_path = os.path.join(project_root, "service_account.json")
 
-            creds = Credentials.from_authorized_user_file(
-                creds_path,
-                scopes=[
-                    "https://www.googleapis.com/auth/spreadsheets",
-                    "https://www.googleapis.com/auth/drive.file",
-                ],
-            )
+                if not os.path.exists(creds_path):
+                    raise FileNotFoundError(
+                        "Brak danych Service Account. "
+                        "Ustaw GOOGLE_SERVICE_ACCOUNT w zmiennych środowiskowych "
+                        "lub dodaj plik service_account.json"
+                    )
+
+                creds = Credentials.from_service_account_file(
+                    creds_path,
+                    scopes=[
+                        "https://www.googleapis.com/auth/spreadsheets",
+                        "https://www.googleapis.com/auth/drive.file",
+                    ],
+                )
+                logger.info("Authorized via Service Account (from file)")
+
             self.client = gspread.authorize(creds)
-            logger.info("Authorized via OAuth")
 
             spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
             if not spreadsheet_id:
@@ -54,7 +72,7 @@ class SheetsManager:
             self.spreadsheet = self.client.open_by_key(spreadsheet_id)
             self.worksheet = self.spreadsheet.get_worksheet(0)
             logger.info("Connected to spreadsheet", extra={"title": self.spreadsheet.title})
-        except Exception as e:
+        except Exception:
             logger.error("Google Sheets authorization failed", exc_info=True)
             raise
 
