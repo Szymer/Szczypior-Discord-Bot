@@ -1,8 +1,9 @@
 """Moduł pomocniczy zawierający wspólne funkcje wykorzystywane w całym projekcie."""
 
-import discord
-from typing import Optional, Union, List, Dict, Any
 from functools import wraps
+from typing import Any, Dict, List, Optional, Union
+
+import discord
 
 
 def get_display_name(user: Union[discord.User, discord.Member]) -> str:

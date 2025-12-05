@@ -1,6 +1,8 @@
 # bot/llm_clients/openai_client.py
+from typing import Any, Dict, Optional
+
 from .base_client import BaseLLMClient
-from typing import Optional, Dict, Any
+
 
 class OpenAIClient(BaseLLMClient):
     """Klient dla API OpenAI (GPT)."""

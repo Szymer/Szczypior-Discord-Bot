@@ -1,6 +1,8 @@
 # bot/llm_clients/anthropic_client.py
+from typing import Any, Dict, Optional
+
 from .base_client import BaseLLMClient
-from typing import Optional, Dict, Any
+
 
 class AnthropicClient(BaseLLMClient):
     """Klient dla API Anthropic (Claude)."""

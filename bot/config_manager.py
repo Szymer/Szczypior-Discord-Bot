@@ -1,7 +1,8 @@
 # bot/config_manager.py
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 
 class ConfigManager:
     """

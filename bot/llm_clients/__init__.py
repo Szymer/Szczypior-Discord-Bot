@@ -1,10 +1,11 @@
 # bot/llm_clients/__init__.py
 import os
-from typing import Type, Optional
+from typing import Optional, Type
+
 from ..config_manager import config_manager
+from .anthropic_client import AnthropicClient
 from .base_client import BaseLLMClient
 from .gemini_client import GeminiClient
-from .anthropic_client import AnthropicClient
 from .openai_client import OpenAIClient
 
 # Mapowanie nazw dostawców na klasy klientów

@@ -1,13 +1,15 @@
 """Szczypior Discord Bot - Klient Gemini AI."""
 
-import os
-from typing import Optional, Dict, Any
-import google.generativeai as genai
-from dotenv import load_dotenv
-import requests
 import json
+import os
 from io import BytesIO
+from typing import Any, Dict, Optional
+
+import google.generativeai as genai
+import requests
+from dotenv import load_dotenv
 from PIL import Image
+
 from .base_client import BaseLLMClient
 
 # Wczytaj zmienne środowiskowe

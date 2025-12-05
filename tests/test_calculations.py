@@ -1,12 +1,12 @@
 """Testy dla systemu kalkulacji punktów."""
 
-import sys
 import os
+import sys
 
 # Dodaj katalog główny do ścieżki
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from bot.main import calculate_points, ACTIVITY_TYPES
+from bot.main import ACTIVITY_TYPES, calculate_points
 
 
 def test_bieganie_teren_basic():

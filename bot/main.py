@@ -11,20 +11,20 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from .sheets_manager import SheetsManager
+from .constants import ACTIVITY_TYPES
+from .exceptions import ConfigurationError, LLMError, SheetsError
 from .llm_clients import get_llm_client
 from .orchestrator import BotOrchestrator
-from .constants import ACTIVITY_TYPES
+from .sheets_manager import SheetsManager
 from .utils import (
-    get_display_name, 
-    create_embed, 
+    aggregate_by_field,
+    calculate_user_totals,
     create_activity_embed,
+    create_embed,
+    get_display_name,
     parse_distance,
     safe_int,
-    aggregate_by_field,
-    calculate_user_totals
 )
-from .exceptions import ConfigurationError, SheetsError, LLMError
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()

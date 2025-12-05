@@ -1,6 +1,7 @@
 # bot/llm_clients/base_client.py
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 
 class BaseLLMClient(ABC):
     """

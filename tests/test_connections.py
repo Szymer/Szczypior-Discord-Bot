@@ -1,6 +1,7 @@
 """Test połączenia z Google Sheets i Discord."""
 
 import os
+
 from dotenv import load_dotenv
 
 # Wczytaj zmienne środowiskowe

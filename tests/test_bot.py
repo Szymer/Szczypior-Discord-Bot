@@ -1,6 +1,7 @@
 """Testy podstawowych funkcji bota."""
 
 import pytest
+
 from bot import __version__
 
 

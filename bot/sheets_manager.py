@@ -2,10 +2,12 @@
 
 import logging
 import os
+from datetime import datetime
+from typing import Dict, List, Optional
+
 import gspread
 from google.oauth2.credentials import Credentials
-from datetime import datetime
-from typing import Optional, List, Dict
+
 from .utils import parse_distance
 
 logger = logging.getLogger(__name__)
