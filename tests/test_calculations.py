@@ -4,7 +4,7 @@ import os
 import sys
 
 # Dodaj katalog główny do ścieżki
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from bot.main import ACTIVITY_TYPES, calculate_points
 
@@ -33,7 +33,9 @@ def test_plywanie_basic():
 def test_rower_min_distance():
     """Test minimalnego dystansu dla roweru."""
     points, error = calculate_points("rower", 5)
-    assert "Minimalny dystans" in error, f"Powinien być błąd minimalnego dystansu, otrzymano: {error}"
+    assert (
+        "Minimalny dystans" in error
+    ), f"Powinien być błąd minimalnego dystansu, otrzymano: {error}"
     assert points == 0, f"Punkty powinny być 0 dla dystansu poniżej minimum"
 
 
@@ -99,14 +101,14 @@ def test_cardio_basic():
 
 def test_all_activities_structure():
     """Test czy wszystkie typy aktywności mają wymagane pola."""
-    required_fields = ['emoji', 'base_points', 'unit', 'min_distance', 'bonuses', 'display_name']
-    
+    required_fields = ["emoji", "base_points", "unit", "min_distance", "bonuses", "display_name"]
+
     for activity, info in ACTIVITY_TYPES.items():
         for field in required_fields:
             assert field in info, f"Aktywność {activity} nie ma pola {field}"
-        assert isinstance(info['base_points'], int), f"base_points dla {activity} musi być int"
-        assert info['base_points'] > 0, f"base_points dla {activity} musi być > 0"
-        assert isinstance(info['bonuses'], list), f"bonuses dla {activity} musi być listą"
+        assert isinstance(info["base_points"], int), f"base_points dla {activity} musi być int"
+        assert info["base_points"] > 0, f"base_points dla {activity} musi być > 0"
+        assert isinstance(info["bonuses"], list), f"bonuses dla {activity} musi być listą"
 
 
 if __name__ == "__main__":
@@ -126,10 +128,10 @@ if __name__ == "__main__":
         test_cardio_basic,
         test_all_activities_structure,
     ]
-    
+
     passed = 0
     failed = 0
-    
+
     for test_func in test_functions:
         try:
             test_func()
@@ -141,10 +143,10 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"❌ {test_func.__name__}: Błąd: {e}")
             failed += 1
-    
+
     print(f"\n{'='*50}")
     print(f"Wyniki testów: {passed} ✅ | {failed} ❌")
     print(f"{'='*50}")
-    
+
     if failed > 0:
         sys.exit(1)

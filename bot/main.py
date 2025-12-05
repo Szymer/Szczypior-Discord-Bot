@@ -32,11 +32,8 @@ load_dotenv()
 # Konfiguracja loggingu
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log', encoding='utf-8')
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("bot.log", encoding="utf-8")],
 )
 logger = logging.getLogger(__name__)
 
@@ -63,36 +60,38 @@ async def on_ready():
     """Wywoływane gdy bot jest gotowy."""
     global sheets_manager, llm_client, orchestrator
     logger.info(f"{bot.user} is online", extra={"bot_id": bot.user.id})
-    
+
     # Inicjalizacja Google Sheets (opcjonalne - tylko jeśli skonfigurowane)
     try:
         sheets_manager = SheetsManager()
         sheets_manager.setup_headers()
         logger.info("Google Sheets connected and ready")
-        
+
         # Buduj cache IID dla szybkiego sprawdzania duplikatów
         sheets_manager.build_iid_cache()
     except Exception as e:
         logger.warning("Google Sheets unavailable", exc_info=True)
         logger.info("Bot will work without data persistence")
-    
+
     # Inicjalizacja LLM Client (opcjonalne - tylko jeśli skonfigurowane)
     try:
         llm_client = get_llm_client()
         model_info = llm_client.get_model_info()
-        logger.info("LLM Client connected", extra={"model": model_info.get('model_name', 'unknown')})
+        logger.info(
+            "LLM Client connected", extra={"model": model_info.get("model_name", "unknown")}
+        )
     except Exception as e:
         logger.warning("LLM Client unavailable", exc_info=True)
         logger.info("Bot will work without AI functions")
-    
+
     # Inicjalizacja orkiestratora
     orchestrator = BotOrchestrator(bot, llm_client, sheets_manager)
-    
+
     # Synchronizacja historii czatu z Google Sheets
     if sheets_manager and llm_client:
         logger.info("Starting chat history sync")
         await orchestrator.sync_chat_history()
-    
+
     # Synchronizacja komend slash z Discord
     try:
         synced = await bot.tree.sync()
@@ -101,19 +100,18 @@ async def on_ready():
         logger.error("Failed to sync slash commands", exc_info=True)
 
 
-
 @bot.event
 async def on_message(message):
     """Wywoływane gdy bot otrzyma wiadomość."""
     # Ignoruj własne wiadomości
     if message.author == bot.user:
         return
-    
+
     # Przetwarzaj komendy (!)
     await bot.process_commands(message)
-    
+
     # Jeśli wiadomość nie jest komendą i orkiestrator jest dostępny
-    if not message.content.startswith('!') and orchestrator:
+    if not message.content.startswith("!") and orchestrator:
         await orchestrator.handle_message(message)
 
 
@@ -129,7 +127,6 @@ async def hello(ctx):
     await ctx.send(f"Cześć {ctx.author.mention}! Jestem Szczypior Bot! 🌿")
 
 
-
 @bot.command(name="typy_aktywnosci")
 async def list_activities(ctx):
     """
@@ -137,35 +134,42 @@ async def list_activities(ctx):
     """
     fields = []
     for activity, info in ACTIVITY_TYPES.items():
-        bonuses_text = ", ".join(info['bonuses']) if info['bonuses'] else "brak"
-        min_dist_text = f"{info['min_distance']} km" if info['min_distance'] > 0 else "BRAK"
-        
-        fields.append({
-            'name': f"{info['emoji']} {info['display_name']}",
-            'value': (
-                f"**{info['base_points']} pkt/{info['unit']}**\n"
-                f"Min. dystans: {min_dist_text}\n"
-                f"Bonusy: {bonuses_text}"
-            ),
-            'inline': True
-        })
-    
+        bonuses_text = ", ".join(info["bonuses"]) if info["bonuses"] else "brak"
+        min_dist_text = f"{info['min_distance']} km" if info["min_distance"] > 0 else "BRAK"
+
+        fields.append(
+            {
+                "name": f"{info['emoji']} {info['display_name']}",
+                "value": (
+                    f"**{info['base_points']} pkt/{info['unit']}**\n"
+                    f"Min. dystans: {min_dist_text}\n"
+                    f"Bonusy: {bonuses_text}"
+                ),
+                "inline": True,
+            }
+        )
+
     embed = create_embed(
         title="🏃 Dostępne typy aktywności",
         description="Lista wszystkich typów aktywności zgodnie z wytycznymi konkursu:",
         color=discord.Color.green(),
         fields=fields,
-        footer="Użyj: !dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]"
+        footer="Użyj: !dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]",
     )
     await ctx.send(embed=embed)
 
 
 @bot.command(name="dodaj_aktywnosc")
-async def add_activity(ctx, activity_type: str, distance: float, 
-                       weight: Optional[float] = None, elevation: Optional[float] = None):
+async def add_activity(
+    ctx,
+    activity_type: str,
+    distance: float,
+    weight: Optional[float] = None,
+    elevation: Optional[float] = None,
+):
     """
     Dodaje nową aktywność.
-    
+
     Przykłady użycia:
     !dodaj_aktywnosc bieganie_teren 5.2
     !dodaj_aktywnosc bieganie_teren 10 5 (z obciążeniem 5kg)
@@ -173,7 +177,7 @@ async def add_activity(ctx, activity_type: str, distance: float,
     !dodaj_aktywnosc rower 25 0 150
     """
     activity_type = activity_type.lower()
-    
+
     if activity_type not in ACTIVITY_TYPES:
         available = ", ".join([f"`{k}`" for k in ACTIVITY_TYPES.keys()])
         await ctx.send(
@@ -182,34 +186,36 @@ async def add_activity(ctx, activity_type: str, distance: float,
             f"Użyj `!typy_aktywnosci` aby zobaczyć szczegóły."
         )
         return
-    
+
     if distance <= 0:
         await ctx.send("❌ Wartość musi być większa niż 0!")
         return
-    
+
     # Oblicz punkty (używamy orkiestratora jeśli dostępny)
     if orchestrator:
-        points, error_msg = orchestrator.calculate_points(activity_type, distance, weight, elevation)
+        points, error_msg = orchestrator.calculate_points(
+            activity_type, distance, weight, elevation
+        )
     else:
         points, error_msg = 0, "Orkiestrator niedostępny"
-    
+
     if error_msg:
         await ctx.send(f"❌ {error_msg}")
         return
-    
+
     # Zapisz do Google Sheets jeśli dostępny
     info = ACTIVITY_TYPES[activity_type]
     username = get_display_name(ctx.author)
     saved = False
-    
+
     if sheets_manager:
         try:
             # Określ czy jest obciążenie > 5kg
             has_weight = weight is not None and weight > 5
-            
+
             # Stwórz timestamp jako int (zgodnie z formatem IID)
             timestamp_int = int(ctx.message.created_at.timestamp())
-            
+
             saved = sheets_manager.add_activity(
                 username=username,
                 activity_type=activity_type,
@@ -217,18 +223,20 @@ async def add_activity(ctx, activity_type: str, distance: float,
                 has_weight=has_weight,
                 timestamp=None,
                 message_id=str(ctx.message.id),
-                message_timestamp=str(timestamp_int)
+                message_timestamp=str(timestamp_int),
             )
         except Exception as e:
             print(f"Błąd zapisu do Sheets: {e}")
-    
+
     # Przygotuj dodatkowe pola
     additional_fields = []
     if weight and weight > 0:
-        additional_fields.append({'name': "Obciążenie", 'value': f"{weight} kg", 'inline': True})
+        additional_fields.append({"name": "Obciążenie", "value": f"{weight} kg", "inline": True})
     if elevation and elevation > 0:
-        additional_fields.append({'name': "Przewyższenie", 'value': f"{elevation} m", 'inline': True})
-    
+        additional_fields.append(
+            {"name": "Przewyższenie", "value": f"{elevation} m", "inline": True}
+        )
+
     # Użyj create_activity_embed z utils
     embed = create_activity_embed(
         activity_info=info,
@@ -236,9 +244,9 @@ async def add_activity(ctx, activity_type: str, distance: float,
         distance=distance,
         points=points,
         additional_fields=additional_fields,
-        saved=saved
+        saved=saved,
     )
-    
+
     await ctx.send(embed=embed)
 
 
@@ -246,43 +254,49 @@ async def add_activity(ctx, activity_type: str, distance: float,
 async def my_history(ctx, limit: int = 5):
     """
     Wyświetla ostatnie aktywności użytkownika.
-    
+
     Przykład: !moja_historia 10
     """
     if not sheets_manager:
-        await ctx.send("❌ Google Sheets nie jest skonfigurowany. Użyj `!pomoc` aby dowiedzieć się jak go skonfigurować.")
+        await ctx.send(
+            "❌ Google Sheets nie jest skonfigurowany. Użyj `!pomoc` aby dowiedzieć się jak go skonfigurować."
+        )
         return
-    
+
     username = get_display_name(ctx.author)
     history = sheets_manager.get_user_history(username)
-    
+
     if not history:
-        await ctx.send(f"{ctx.author.mention}, nie masz jeszcze żadnych zapisanych aktywności! Użyj `!dodaj_aktywnosc`")
+        await ctx.send(
+            f"{ctx.author.mention}, nie masz jeszcze żadnych zapisanych aktywności! Użyj `!dodaj_aktywnosc`"
+        )
         return
-    
+
     # Ogranicz do ostatnich N wpisów
     history = history[-limit:][::-1]  # Odwróć aby najnowsze były na górze
-    
+
     fields = []
     for record in history:
-        activity = record.get('Aktywność', 'N/A')
-        distance = parse_distance(record.get('Dystans (km)', 0))
-        points = safe_int(record.get('Punkty', 0))
-        date = record.get('Data', 'N/A')
-        
-        emoji = ACTIVITY_TYPES.get(activity.lower(), {}).get('emoji', '📝')
-        fields.append({
-            'name': f"{emoji} {activity} - {date}",
-            'value': f"Wartość: {distance} | Punkty: {points} 🏆",
-            'inline': False
-        })
-    
+        activity = record.get("Aktywność", "N/A")
+        distance = parse_distance(record.get("Dystans (km)", 0))
+        points = safe_int(record.get("Punkty", 0))
+        date = record.get("Data", "N/A")
+
+        emoji = ACTIVITY_TYPES.get(activity.lower(), {}).get("emoji", "📝")
+        fields.append(
+            {
+                "name": f"{emoji} {activity} - {date}",
+                "value": f"Wartość: {distance} | Punkty: {points} 🏆",
+                "inline": False,
+            }
+        )
+
     embed = create_embed(
         title=f"📊 Historia aktywności - {ctx.author.display_name}",
         color=discord.Color.blue(),
-        fields=fields
+        fields=fields,
     )
-    
+
     await ctx.send(embed=embed)
 
 
@@ -292,21 +306,21 @@ async def my_points(ctx):
     if not sheets_manager:
         await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
         return
-    
+
     username = get_display_name(ctx.author)
     total_points = sheets_manager.get_user_total_points(username)
     history = sheets_manager.get_user_history(username)
-    
+
     embed = create_embed(
         title="🏆 Twoje punkty",
         color=discord.Color.gold(),
         fields=[
-            {'name': "Użytkownik", 'value': ctx.author.mention, 'inline': True},
-            {'name': "Całkowite punkty", 'value': f"**{total_points}** 🏆", 'inline': True},
-            {'name': "Liczba aktywności", 'value': f"{len(history)}", 'inline': True}
-        ]
+            {"name": "Użytkownik", "value": ctx.author.mention, "inline": True},
+            {"name": "Całkowite punkty", "value": f"**{total_points}** 🏆", "inline": True},
+            {"name": "Liczba aktywności", "value": f"{len(history)}", "inline": True},
+        ],
     )
-    
+
     await ctx.send(embed=embed)
 
 
@@ -319,46 +333,46 @@ async def help_command(ctx):
         color=discord.Color.green(),
         fields=[
             {
-                'name': "📝 Podstawowe",
-                'value': (
+                "name": "📝 Podstawowe",
+                "value": (
                     "`!ping` - Sprawdza latencję bota\n"
                     "`!hello` - Powitanie\n"
                     "`!pomoc` - Ta wiadomość"
                 ),
-                'inline': False
+                "inline": False,
             },
             {
-                'name': "🏃 Aktywności",
-                'value': (
+                "name": "🏃 Aktywności",
+                "value": (
                     "`!typy_aktywnosci` - Lista dostępnych aktywności\n"
                     "`!dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]` - Dodaj aktywność\n"
                     "`!moja_historia [limit]` - Twoje ostatnie aktywności\n"
                     "`!moje_punkty` - Sprawdź swoje punkty"
                 ),
-                'inline': False
+                "inline": False,
             },
             {
-                'name': "📊 Rankingi i statystyki",
-                'value': (
+                "name": "📊 Rankingi i statystyki",
+                "value": (
                     "`!ranking [limit]` - Ranking użytkowników według punktów\n"
                     "`!stats` - Statystyki całego serwera\n"
                     "`!stats_aktywnosci` - Najpopularniejsze aktywności"
                 ),
-                'inline': False
+                "inline": False,
             },
             {
-                'name': "📊 Przykłady",
-                'value': (
+                "name": "📊 Przykłady",
+                "value": (
                     "`!dodaj_aktywnosc bieganie_teren 5.2`\n"
                     "`!dodaj_aktywnosc bieganie_teren 10 5` (z 5kg obciążeniem)\n"
                     "`!dodaj_aktywnosc bieganie_teren 15 0 200` (z 200m przewyższeniem)\n"
                     "`!dodaj_aktywnosc rower 25` (rower 25km)\n"
                     "`!moja_historia 10` (ostatnie 10 aktywności)"
                 ),
-                'inline': False
-            }
+                "inline": False,
+            },
         ],
-        footer="Bot stworzony dla miłośników aktywności fizycznej! 🌿"
+        footer="Bot stworzony dla miłośników aktywności fizycznej! 🌿",
     )
     await ctx.send(embed=embed)
 
@@ -367,48 +381,48 @@ async def help_command(ctx):
 async def ranking(ctx, limit: int = 10):
     """
     Wyświetla ranking użytkowników według punktów.
-    
+
     Przykład: !ranking 5
     """
     if not sheets_manager:
         await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
         return
-    
+
     try:
         # Pobierz wszystkie rekordy i oblicz totalne punkty
         all_records = sheets_manager.worksheet.get_all_records()
-        
+
         if not all_records:
             await ctx.send("📊 Brak danych do wyświetlenia rankingu.")
             return
-        
+
         # Użyj calculate_user_totals z utils
         user_totals = calculate_user_totals(all_records)
-        
+
         # Sortuj według punktów malejąco
         sorted_users = sorted(
-            user_totals.items(), 
-            key=lambda x: x[1]['total_points'], 
-            reverse=True
+            user_totals.items(), key=lambda x: x[1]["total_points"], reverse=True
         )[:limit]
-        
+
         medals = ["🥇", "🥈", "🥉"]
         fields = []
         for i, (username, data) in enumerate(sorted_users):
             medal = medals[i] if i < 3 else f"{i+1}."
-            fields.append({
-                'name': f"{medal} {username}",
-                'value': f"**{data['total_points']}** punktów 🏆",
-                'inline': False
-            })
-        
+            fields.append(
+                {
+                    "name": f"{medal} {username}",
+                    "value": f"**{data['total_points']}** punktów 🏆",
+                    "inline": False,
+                }
+            )
+
         embed = create_embed(
             title="🏆 Ranking użytkowników",
             description=f"Top {min(limit, len(sorted_users))} użytkowników według punktów:",
             color=discord.Color.gold(),
-            fields=fields
+            fields=fields,
         )
-        
+
         await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"❌ Błąd podczas generowania rankingu: {e}")
@@ -420,46 +434,59 @@ async def server_stats(ctx):
     if not sheets_manager:
         await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
         return
-    
+
     try:
         all_records = sheets_manager.worksheet.get_all_records()
-        
+
         if not all_records:
             await ctx.send("📊 Brak danych do wyświetlenia statystyk.")
             return
-        
+
         # Oblicz statystyki
         total_activities = len(all_records)
-        unique_users = len(set(r.get('User', '') for r in all_records if r.get('User')))
-        
+        unique_users = len(set(r.get("User", "") for r in all_records if r.get("User")))
+
         # Użyj parse_distance i safe_int z utils
-        total_points = sum(safe_int(r.get('Punkty', 0)) for r in all_records)
-        total_distance = sum(parse_distance(r.get('Dystans (km)', 0)) for r in all_records)
-        
+        total_points = sum(safe_int(r.get("Punkty", 0)) for r in all_records)
+        total_distance = sum(parse_distance(r.get("Dystans (km)", 0)) for r in all_records)
+
         # Najpopularniejsza aktywność
-        activities = [r.get('Aktywność', '') for r in all_records if r.get('Aktywność')]
+        activities = [r.get("Aktywność", "") for r in all_records if r.get("Aktywność")]
         if activities:
             from collections import Counter
+
             most_common = Counter(activities).most_common(1)[0]
             popular_activity = most_common[0]
             popular_count = most_common[1]
         else:
             popular_activity = "N/A"
             popular_count = 0
-        
+
         embed = create_embed(
             title="📊 Statystyki serwera",
             description="Ogólne statystyki wszystkich użytkowników:",
             color=discord.Color.blue(),
             fields=[
-                {'name': "👥 Aktywni użytkownicy", 'value': f"**{unique_users}**", 'inline': True},
-                {'name': "📝 Liczba aktywności", 'value': f"**{total_activities}**", 'inline': True},
-                {'name': "🏆 Suma punktów", 'value': f"**{total_points}**", 'inline': True},
-                {'name': "📏 Suma dystansu", 'value': f"**{total_distance:.1f}** km", 'inline': True},
-                {'name': "⭐ Najpopularniejsza aktywność", 'value': f"**{popular_activity}** ({popular_count}x)", 'inline': True}
-            ]
+                {"name": "👥 Aktywni użytkownicy", "value": f"**{unique_users}**", "inline": True},
+                {
+                    "name": "📝 Liczba aktywności",
+                    "value": f"**{total_activities}**",
+                    "inline": True,
+                },
+                {"name": "🏆 Suma punktów", "value": f"**{total_points}**", "inline": True},
+                {
+                    "name": "📏 Suma dystansu",
+                    "value": f"**{total_distance:.1f}** km",
+                    "inline": True,
+                },
+                {
+                    "name": "⭐ Najpopularniejsza aktywność",
+                    "value": f"**{popular_activity}** ({popular_count}x)",
+                    "inline": True,
+                },
+            ],
         )
-        
+
         await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"❌ Błąd podczas generowania statystyk: {e}")
@@ -471,88 +498,92 @@ async def activity_stats(ctx):
     if not sheets_manager:
         await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
         return
-    
+
     try:
         all_records = sheets_manager.worksheet.get_all_records()
-        
+
         if not all_records:
             await ctx.send("📊 Brak danych do wyświetlenia statystyk.")
             return
-        
+
         # Użyj aggregate_by_field z utils
-        activity_stats_data = aggregate_by_field(all_records, 'Aktywność')
-        
+        activity_stats_data = aggregate_by_field(all_records, "Aktywność")
+
         # Sortuj według liczby aktywności
         sorted_activities = sorted(
-            activity_stats_data.items(),
-            key=lambda x: x[1]['count'],
-            reverse=True
+            activity_stats_data.items(), key=lambda x: x[1]["count"], reverse=True
         )
-        
+
         fields = []
         for activity, stats in sorted_activities:
             info = ACTIVITY_TYPES.get(activity.lower(), {})
-            emoji = info.get('emoji', '📝')
-            unit = info.get('unit', 'km')
-            
-            fields.append({
-                'name': f"{emoji} {activity.capitalize()}",
-                'value': (
-                    f"Liczba: **{stats['count']}**\n"
-                    f"Suma: **{stats['total_distance']:.1f}** {unit}\n"
-                    f"Punkty: **{stats['total_points']}** 🏆"
-                ),
-                'inline': True
-            })
-        
+            emoji = info.get("emoji", "📝")
+            unit = info.get("unit", "km")
+
+            fields.append(
+                {
+                    "name": f"{emoji} {activity.capitalize()}",
+                    "value": (
+                        f"Liczba: **{stats['count']}**\n"
+                        f"Suma: **{stats['total_distance']:.1f}** {unit}\n"
+                        f"Punkty: **{stats['total_points']}** 🏆"
+                    ),
+                    "inline": True,
+                }
+            )
+
         embed = create_embed(
             title="📊 Statystyki aktywności",
-            description="Podsumowanie wszystkich typów aktywności:" if sorted_activities else "Brak zapisanych aktywności.",
+            description=(
+                "Podsumowanie wszystkich typów aktywności:"
+                if sorted_activities
+                else "Brak zapisanych aktywności."
+            ),
             color=discord.Color.purple(),
-            fields=fields if sorted_activities else None
+            fields=fields if sorted_activities else None,
         )
-        
+
         await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"❌ Błąd podczas generowania statystyk aktywności: {e}")
 
 
-@bot.tree.command(name="podsumowanie", description="Generuje podsumowanie wyników z wybranego okresu z komentarzem AI")
+@bot.tree.command(
+    name="podsumowanie",
+    description="Generuje podsumowanie wyników z wybranego okresu z komentarzem AI",
+)
 @app_commands.describe(okres="Wybierz okres do podsumowania")
-async def podsumowanie(
-    interaction: discord.Interaction,
-    okres: str
-):
+async def podsumowanie(interaction: discord.Interaction, okres: str):
     """
     Komenda slash generująca podsumowanie wyników z wybranego okresu.
-    
+
     Args:
         interaction: Interakcja Discord
         okres: Wybrany okres (caly/tydzien/miesiac/ostatni_tydzien)
     """
     await interaction.response.defer(thinking=True)
-    
+
     if not sheets_manager:
         await interaction.followup.send("❌ Google Sheets nie jest skonfigurowany.")
         return
-    
+
     if not llm_client:
         await interaction.followup.send("❌ AI Client nie jest skonfigurowany.")
         return
-    
+
     try:
         # Pobierz wszystkie aktywności
         all_activities = sheets_manager.get_all_activities_with_timestamps()
-        
+
         if not all_activities:
             await interaction.followup.send("📊 Brak danych do podsumowania.")
             return
-        
+
         # Filtruj dane według wybranego okresu
         now = datetime.now()
         filtered_activities = []
         period_title = ""
-        
+
         if okres == "caly":
             filtered_activities = all_activities
             period_title = "Cały konkurs"
@@ -561,20 +592,22 @@ async def podsumowanie(
             days_since_sunday = (now.weekday() + 1) % 7
             last_sunday = now - timedelta(days=days_since_sunday + 7)
             last_saturday = last_sunday + timedelta(days=6)
-            
+
             filtered_activities = [
-                a for a in all_activities
-                if last_sunday <= datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S") <= last_saturday
+                a
+                for a in all_activities
+                if last_sunday <= datetime.strptime(a["Data"], "%Y-%m-%d %H:%M:%S") <= last_saturday
             ]
             period_title = f"Ostatni tydzień ({last_sunday.strftime('%d.%m')} - {last_saturday.strftime('%d.%m')})"
         elif okres == "biezacy_tydzien":
             # Bieżący tydzień (od niedzieli do dziś)
             days_since_sunday = (now.weekday() + 1) % 7
             this_sunday = now - timedelta(days=days_since_sunday)
-            
+
             filtered_activities = [
-                a for a in all_activities
-                if datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S") >= this_sunday
+                a
+                for a in all_activities
+                if datetime.strptime(a["Data"], "%Y-%m-%d %H:%M:%S") >= this_sunday
             ]
             period_title = f"Bieżący tydzień (od {this_sunday.strftime('%d.%m')})"
         elif okres == "miesiac":
@@ -585,54 +618,67 @@ async def podsumowanie(
             else:
                 last_month_year = now.year
                 last_month = now.month - 1
-            
+
             filtered_activities = [
-                a for a in all_activities
-                if datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S").month == last_month
-                and datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S").year == last_month_year
+                a
+                for a in all_activities
+                if datetime.strptime(a["Data"], "%Y-%m-%d %H:%M:%S").month == last_month
+                and datetime.strptime(a["Data"], "%Y-%m-%d %H:%M:%S").year == last_month_year
             ]
-            
-            month_names = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", 
-                          "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
+
+            month_names = [
+                "Styczeń",
+                "Luty",
+                "Marzec",
+                "Kwiecień",
+                "Maj",
+                "Czerwiec",
+                "Lipiec",
+                "Sierpień",
+                "Wrzesień",
+                "Październik",
+                "Listopad",
+                "Grudzień",
+            ]
             period_title = f"{month_names[last_month - 1]} {last_month_year}"
-        
+
         if not filtered_activities:
             await interaction.followup.send(f"📊 Brak danych dla okresu: {period_title}")
             return
-        
+
         # Oblicz statystyki
         stats = _calculate_period_stats(filtered_activities)
-        
+
         # Wygeneruj komentarz AI
         ai_comment = await _generate_ai_summary(stats, period_title)
-        
+
         # Utwórz embed
         embed = discord.Embed(
             title=f"📊 Podsumowanie: {period_title}",
             description=ai_comment,
-            color=discord.Color.gold()
+            color=discord.Color.gold(),
         )
-        
+
         # Dodaj pola statystyk
         embed.add_field(
             name="🏆 Najlepszy wynik",
             value=f"**{stats['top_scorer']['nick']}** - {stats['top_scorer']['punkty']} pkt",
-            inline=False
+            inline=False,
         )
-        
+
         embed.add_field(
             name="🏃 Najdłuższy bieg",
             value=f"**{stats['longest_run']['nick']}** - {stats['longest_run']['dystans']} km ({stats['longest_run']['typ']})",
-            inline=False
+            inline=False,
         )
-        
-        if stats.get('longest_swim'):
+
+        if stats.get("longest_swim"):
             embed.add_field(
                 name="🏊 Najdłuższe pływanie",
                 value=f"**{stats['longest_swim']['nick']}** - {stats['longest_swim']['dystans']} km",
-                inline=False
+                inline=False,
             )
-        
+
         embed.add_field(
             name="📈 Łączne statystyki",
             value=(
@@ -640,25 +686,23 @@ async def podsumowanie(
                 f"Dystans: **{stats['total_distance']:.1f} km**\n"
                 f"Punkty: **{stats['total_points']}**"
             ),
-            inline=False
+            inline=False,
         )
-        
+
         embed.add_field(
-            name="👥 Aktywni uczestnicy",
-            value=f"**{stats['active_users']}** osób",
-            inline=True
+            name="👥 Aktywni uczestnicy", value=f"**{stats['active_users']}** osób", inline=True
         )
-        
+
         embed.set_footer(text=f"Wygenerowano: {now.strftime('%Y-%m-%d %H:%M')}")
-        
+
         await interaction.followup.send(embed=embed)
-        
+
     except Exception as e:
         print(f"❌ Błąd generowania podsumowania: {e}")
         await interaction.followup.send(f"❌ Wystąpił błąd: {e}")
 
 
-@podsumowanie.autocomplete('okres')
+@podsumowanie.autocomplete("okres")
 async def okres_autocomplete(
     interaction: discord.Interaction,
     current: str,
@@ -666,8 +710,12 @@ async def okres_autocomplete(
     """Autocomplete dla wyboru okresu."""
     choices = [
         discord.app_commands.Choice(name="Cały konkurs", value="caly"),
-        discord.app_commands.Choice(name="Bieżący tydzień (niedziela-dziś)", value="biezacy_tydzien"),
-        discord.app_commands.Choice(name="Ostatni tydzień (niedziela-sobota)", value="ostatni_tydzien"),
+        discord.app_commands.Choice(
+            name="Bieżący tydzień (niedziela-dziś)", value="biezacy_tydzien"
+        ),
+        discord.app_commands.Choice(
+            name="Ostatni tydzień (niedziela-sobota)", value="ostatni_tydzien"
+        ),
         discord.app_commands.Choice(name="Ostatni miesiąc kalendarzowy", value="miesiac"),
     ]
     return choices
@@ -676,70 +724,70 @@ async def okres_autocomplete(
 def _calculate_period_stats(activities: list) -> dict:
     """
     Oblicza statystyki dla danego okresu.
-    
+
     Args:
         activities: Lista aktywności z arkusza
-        
+
     Returns:
         Słownik ze statystykami
     """
     from collections import defaultdict
-    
+
     user_points = defaultdict(int)
     user_activities = defaultdict(int)
-    longest_run = {'dystans': 0, 'nick': '', 'typ': ''}
-    longest_swim = {'dystans': 0, 'nick': ''}
+    longest_run = {"dystans": 0, "nick": "", "typ": ""}
+    longest_swim = {"dystans": 0, "nick": ""}
     total_distance = 0
     total_points = 0
-    
+
     for activity in activities:
-        nick = activity.get('Nick', 'Nieznany')
-        dystans = parse_distance(activity.get('Dystans (km)', 0))
-        punkty_str = activity.get('PUNKTY', '0')
+        nick = activity.get("Nick", "Nieznany")
+        dystans = parse_distance(activity.get("Dystans (km)", 0))
+        punkty_str = activity.get("PUNKTY", "0")
         punkty = safe_int(punkty_str)
-        typ = activity.get('Rodzaj Aktywności', '')
-        
+        typ = activity.get("Rodzaj Aktywności", "")
+
         # Suma punktów użytkownika
         user_points[nick] += punkty
         user_activities[nick] += 1
-        
+
         # Łączne statystyki
         total_distance += dystans
         total_points += punkty
-        
+
         # Najdłuższy bieg (Bieganie teren/bieżnia)
-        if 'bieganie' in typ.lower() and dystans > longest_run['dystans']:
-            longest_run = {'dystans': dystans, 'nick': nick, 'typ': typ}
-        
+        if "bieganie" in typ.lower() and dystans > longest_run["dystans"]:
+            longest_run = {"dystans": dystans, "nick": nick, "typ": typ}
+
         # Najdłuższe pływanie
-        if 'pływanie' in typ.lower() and dystans > longest_swim['dystans']:
-            longest_swim = {'dystans': dystans, 'nick': nick}
-    
+        if "pływanie" in typ.lower() and dystans > longest_swim["dystans"]:
+            longest_swim = {"dystans": dystans, "nick": nick}
+
     # Top scorer
-    top_scorer_nick = max(user_points.items(), key=lambda x: x[1])[0] if user_points else ''
+    top_scorer_nick = max(user_points.items(), key=lambda x: x[1])[0] if user_points else ""
     top_scorer_points = user_points[top_scorer_nick] if top_scorer_nick else 0
-    
+
     return {
-        'top_scorer': {'nick': top_scorer_nick, 'punkty': top_scorer_points},
-        'longest_run': longest_run,
-        'longest_swim': longest_swim if longest_swim['dystans'] > 0 else None,
-        'total_activities': len(activities),
-        'total_distance': total_distance,
-        'total_points': total_points,
-        'active_users': len(user_points),
-        'user_points': dict(user_points),
-        'user_activities': dict(user_activities)
+        "top_scorer": {"nick": top_scorer_nick, "punkty": top_scorer_points},
+        "longest_run": longest_run,
+        "longest_swim": longest_swim if longest_swim["dystans"] > 0 else None,
+        "total_activities": len(activities),
+        "total_distance": total_distance,
+        "total_points": total_points,
+        "active_users": len(user_points),
+        "user_points": dict(user_points),
+        "user_activities": dict(user_activities),
     }
 
 
 async def _generate_ai_summary(stats: dict, period: str) -> str:
     """
     Generuje komentarz AI na podstawie statystyk.
-    
+
     Args:
         stats: Statystyki okresu
         period: Nazwa okresu
-        
+
     Returns:
         Komentarz wygenerowany przez AI
     """
@@ -766,14 +814,16 @@ WYMAGANIA:
 Wygeneruj tylko tekst podsumowania, bez dodatkowych komentarzy."""
 
         response = await llm_client.generate_text(prompt)
-        
+
         if response:
             # Usuń markdown formatting jeśli AI je dodało
-            response = response.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+            response = (
+                response.replace("**", "").replace("__", "").replace("*", "").replace("_", "")
+            )
             return response
-        
+
         return f"Świetna robota! W okresie '{period}' zrealizowano {stats['total_activities']} aktywności na łączny dystans {stats['total_distance']:.1f} km! 🎉"
-        
+
     except Exception as e:
         print(f"❌ Błąd generowania komentarza AI: {e}")
         return f"Imponujące wyniki w okresie '{period}'! Łącznie {stats['total_activities']} aktywności i {stats['total_points']} punktów! 💪"

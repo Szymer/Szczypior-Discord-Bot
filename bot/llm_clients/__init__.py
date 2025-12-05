@@ -15,6 +15,7 @@ CLIENT_MAP = {
     "openai": OpenAIClient,
 }
 
+
 def get_llm_client(**kwargs) -> BaseLLMClient:
     """
     Fabryka do tworzenia instancji klienta LLM.
@@ -34,20 +35,22 @@ def get_llm_client(**kwargs) -> BaseLLMClient:
         raise ValueError(f"Brak konfiguracji dla dostawcy LLM: '{provider}' w config.json.")
 
     client_class = CLIENT_MAP.get(provider)
-    
+
     if not client_class:
-        raise ValueError(f"Nieobsługiwany dostawca LLM: '{provider}'. Dostępni dostawcy: {list(CLIENT_MAP.keys())}")
+        raise ValueError(
+            f"Nieobsługiwany dostawca LLM: '{provider}'. Dostępni dostawcy: {list(CLIENT_MAP.keys())}"
+        )
 
     # Przygotuj argumenty dla konstruktora klienta
     constructor_args = {}
-    
+
     # 1. Użyj modelu z config.json jako domyślnego
-    constructor_args['model_name'] = llm_config.get('default_model')
-    
+    constructor_args["model_name"] = llm_config.get("default_model")
+
     # 2. Pobierz parametry generowania
-    constructor_args['generation_params'] = config_manager.get_llm_generation_params(provider)
+    constructor_args["generation_params"] = config_manager.get_llm_generation_params(provider)
 
     # 3. Nadpisz argumenty tymi przekazanymi do fabryki (np. model_name z polecenia)
     constructor_args.update(kwargs)
-        
+
     return client_class(**constructor_args)

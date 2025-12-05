@@ -13,13 +13,19 @@ class OpenAIClient(BaseLLMClient):
         # np. self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         print(f"OpenAIClient zainicjalizowany (placeholder) z modelem: {self.model_name}")
 
-    def generate_text(self, prompt: str, temperature: float = 0.7, max_tokens: Optional[int] = 2048) -> str:
+    def generate_text(
+        self, prompt: str, temperature: float = 0.7, max_tokens: Optional[int] = 2048
+    ) -> str:
         # Logika wywołania API OpenAI do generowania tekstu
-        raise NotImplementedError("Metoda `generate_text` nie jest zaimplementowana dla OpenAIClient.")
+        raise NotImplementedError(
+            "Metoda `generate_text` nie jest zaimplementowana dla OpenAIClient."
+        )
 
     def analyze_image(self, image_url: str, prompt: str) -> Dict[str, Any]:
         # Logika wywołania API OpenAI do analizy obrazu (vision)
-        raise NotImplementedError("Metoda `analyze_image` nie jest zaimplementowana dla OpenAIClient.")
+        raise NotImplementedError(
+            "Metoda `analyze_image` nie jest zaimplementowana dla OpenAIClient."
+        )
 
     def get_model_info(self) -> Dict[str, Any]:
         return {"provider": "OpenAI", "model_name": self.model_name}
