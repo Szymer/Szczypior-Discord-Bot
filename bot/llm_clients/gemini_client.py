@@ -147,22 +147,21 @@ class GeminiClient(BaseLLMClient):
                 print(f"Zmniejszam obraz z {image.size} do maks. {max_size}")
                 image.thumbnail(max_size, Image.Resampling.LANCZOS)
 
-            # Konwertuj do RGB jeśli potrzeba (usuwa kanał alpha)
-            if image.mode in ("RGBA", "LA", "P"):
-                print(f"Konwertuję obraz z {image.mode} do RGB")
-                background = Image.new("RGB", image.size, (255, 255, 255))
-                if image.mode == "P":
-                    image = image.convert("RGBA")
-                background.paste(
-                    image, mask=image.split()[-1] if image.mode in ("RGBA", "LA") else None
-                )
-                image = background
+            # Konwertuj do RGB tylko jeśli format P (paleta), RGBA i LA zostaw bez zmian
+            if image.mode == "P":
+                print(f"Konwertuję obraz z {image.mode} do RGBA")
+                image = image.convert("RGBA")
 
             # Zapisz przetworzone zdjęcie do bajtów
             buffer = BytesIO()
-            image.save(buffer, format="JPEG", quality=85)
+            # Użyj PNG dla obrazów z przezroczystością, JPEG dla reszty
+            if image.mode in ("RGBA", "LA"):
+                image.save(buffer, format="PNG")
+                content_type = "image/png"
+            else:
+                image.save(buffer, format="JPEG", quality=85)
+                content_type = "image/jpeg"
             image_bytes = buffer.getvalue()
-            content_type = "image/jpeg"
 
             print(f"✅ Przetworzono obraz: rozmiar={len(image_bytes)} bajtów, wymiary={image.size}")
 
@@ -207,6 +206,26 @@ class GeminiClient(BaseLLMClient):
             except:
                 pass
             return {"typ_aktywnosci": None, "dystans": None, "komentarz": "Błąd analizy obrazu"}
+
+    def analyze_image_with_better_model(
+        self, 
+        image_url: str, 
+        prompt: str, 
+        system_instruction: Optional[str] = None,
+        better_model: str = "models/gemini-2.5-flash"
+    ) -> Dict[str, Any]:
+        """Analizuje obraz używając lepszego modelu (retry dla problemów z kontrastem)."""
+        # Tymczasowo zmień model
+        original_model = self.model_name
+        self.model_name = better_model
+        
+        try:
+            print(f"🔄 Retrying image analysis with better model: {better_model}")
+            result = self.analyze_image(image_url, prompt, system_instruction)
+            return result
+        finally:
+            # Przywróć oryginalny model
+            self.model_name = original_model
 
     def get_model_info(self) -> Dict[str, Any]:
         """Zwraca informacje o używanym modelu."""

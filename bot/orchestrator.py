@@ -191,6 +191,15 @@ class BotOrchestrator:
                 logger.info("AI did not find distance in text")
                 return None
 
+            # Loguj pełną odpowiedź AI dla analizy tekstu
+            logger.info(
+                "AI text analysis result",
+                extra={
+                    "text_excerpt": text[:100],
+                    "analysis": result
+                }
+            )
+
             logger.info(
                 "AI recognized activity",
                 extra={"type": result["typ_aktywnosci"], "distance": result["dystans"]},
@@ -235,8 +244,18 @@ class BotOrchestrator:
 
     async def handle_message(self, message: discord.Message):
         """Przetwarza wiadomość i decyduje o podjęciu akcji."""
+        # Loguj ID wiadomości na początku przetwarzania
+        logger.info(
+            "Processing Discord message",
+            extra={"message_id": message.id, "author": str(message.author), "channel": str(message.channel)}
+        )
+        
         # Ignoruj własne wiadomości i komendy
         if message.author == self.bot.user or message.content.startswith("!"):
+            return
+
+        # Pomiń wiadomości typu 19 (reply/odpowiedzi)
+        if message.type.value == 19:
             return
 
         # Sprawdź czy wiadomość zawiera słowa kluczowe aktywności
@@ -249,7 +268,10 @@ class BotOrchestrator:
 
         # PRIORYTET 1: Sprawdź duplikat PRZED jakąkolwiek analizą AI
         if (has_activity_keywords or has_image) and self._activity_already_exists(message):
-            print(f"⏭️ Pomijam wiadomość {message.id} - już przetworzona")
+            logger.info(
+                "Skipping duplicate message",
+                extra={"message_id": message.id, "author": str(message.author)}
+            )
             # Dodaj cichą reakcję jeśli jeszcze nie ma
             if not any(r.emoji == "✅" for r in message.reactions):
                 await message.add_reaction("✅")
@@ -259,7 +281,12 @@ class BotOrchestrator:
         if has_image:
             logger.info(
                 "Processing image message",
-                extra={"has_text": bool(message.content), "author": str(message.author)},
+                extra={
+                    "message_id": message.id,
+                    "discord_msg_id": message.id,
+                    "has_text": bool(message.content),
+                    "author": str(message.author)
+                },
             )
             await message.add_reaction("🤔")
 
@@ -294,7 +321,7 @@ class BotOrchestrator:
                 )
 
                 if not has_basic_data:
-                    logger.warning("Image does not contain complete activity data")
+                    logger.warning("Image does not contain complete activity data", extra={"message_id": message.id})
                     await message.remove_reaction("🤔", self.bot.user)
                     await message.add_reaction("❓")
                     return
@@ -302,7 +329,7 @@ class BotOrchestrator:
                 await self._process_successful_analysis(message, analysis)
                 return
             except LLMAnalysisError as e:
-                logger.error("Image analysis failed", exc_info=True)
+                logger.error("Image analysis failed", extra={"message_id": message.id}, exc_info=True)
                 await message.remove_reaction("🤔", self.bot.user)
                 await message.add_reaction("❓")
                 return
@@ -313,7 +340,12 @@ class BotOrchestrator:
 
         logger.info(
             "Detected activity keywords in text",
-            extra={"activity_type": has_activity_keywords, "author": str(message.author)},
+            extra={
+                "message_id": message.id,
+                "discord_msg_id": message.id,
+                "activity_type": has_activity_keywords,
+                "author": str(message.author)
+            },
         )
         await message.add_reaction("🤔")
 
@@ -329,7 +361,7 @@ class BotOrchestrator:
             await self._process_successful_analysis(message, analysis_result)
             return
         except LLMAnalysisError as e:
-            logger.error("Text analysis failed", exc_info=True)
+            logger.error("Text analysis failed", extra={"message_id": message.id}, exc_info=True)
             await message.remove_reaction("🤔", self.bot.user)
             await message.add_reaction("❓")
             return
@@ -378,11 +410,65 @@ class BotOrchestrator:
         )
         
         # Wywołaj analyze_image z system_instruction
-        return self.gemini_client.analyze_image(
+        analysis_result = self.gemini_client.analyze_image(
             image_url, 
             user_prompt,
             system_instruction=system_prompt
         )
+        
+        # Loguj pełną odpowiedź AI
+        logger.info(
+            "AI image analysis result",
+            extra={
+                "text_context": text_context,
+                "analysis": analysis_result
+            }
+        )
+        
+        # Sprawdź czy gemini-flash-lite nie poradził sobie z kontrastem
+        comment = analysis_result.get("komentarz", "")
+        is_low_contrast = (
+            "nieczytelny" in comment.lower() or 
+            "niski kontrast" in comment.lower() or
+            "low contrast" in comment.lower()
+        )
+        
+        has_no_data = not analysis_result.get("dystans") and not analysis_result.get("czas")
+        
+        # Jeśli flash-lite nie poradził sobie z kontrastem, spróbuj z lepszym modelem
+        if is_low_contrast and has_no_data:
+            logger.warning(
+                "Low contrast detected, retrying with Gemini 2.5 Pro",
+                extra={"original_comment": comment}
+            )
+            
+            try:
+                # Użyj lepszego modelu (Gemini 2.5 Flash)
+                analysis_result_pro = self.gemini_client.analyze_image_with_better_model(
+                    image_url,
+                    user_prompt,
+                    system_instruction=system_prompt,
+                    better_model="models/gemini-2.5-flash"
+                )
+                
+                logger.info(
+                    "AI image analysis result (Gemini Pro retry)",
+                    extra={
+                        "text_context": text_context,
+                        "analysis": analysis_result_pro
+                    }
+                )
+                
+                return analysis_result_pro
+            except Exception as e:
+                logger.error(
+                    "Failed to analyze with better model",
+                    extra={"error": str(e)}
+                )
+                # Zwróć oryginalny wynik jeśli retry się nie udało
+                return analysis_result
+        
+        return analysis_result
 
     async def _process_successful_analysis(
         self, message: discord.Message, analysis: Dict[str, Any]
@@ -392,6 +478,16 @@ class BotOrchestrator:
         distance = float(analysis["dystans"])
         weight = float(analysis.get("obciazenie") or 0)
         elevation = float(analysis.get("przewyzszenie") or 0)
+        
+        logger.info(
+            "Successful activity analysis",
+            extra={
+                "discord_msg_id": message.id,
+                "activity_type": activity_type,
+                "distance": distance,
+                "author": str(message.author)
+            }
+        )
 
         points, error_msg = self.calculate_points(
             activity_type,
@@ -413,6 +509,10 @@ class BotOrchestrator:
 
         # Zapis do arkusza
         saved = self._save_activity_to_sheets(message, analysis, points, ai_comment)
+        logger.info(
+            "Activity saved to Sheets",
+            extra={"discord_msg_id": message.id, "points": points, "saved": saved}
+        )
 
         # Wysyłanie odpowiedzi
         embed = self._create_response_embed(message, analysis, points, ai_comment, saved)
@@ -481,6 +581,26 @@ class BotOrchestrator:
 
             # Użyj get_display_name z utils
             display_name = get_display_name(message.author)
+
+            # Loguj wszystkie dane przed zapisem
+            logger.info(
+                "Saving activity data",
+                extra={
+                    "discord_msg_id": message.id,
+                    "user": display_name,
+                    "activity_type": analysis["typ_aktywnosci"],
+                    "distance_km": float(analysis["dystans"]),
+                    "weight_kg": weight_value,
+                    "has_weight": has_weight,
+                    "elevation_m": float(analysis.get("przewyzszenie") or 0),
+                    "time": analysis.get("czas"),
+                    "pace": analysis.get("tempo"),
+                    "calories": analysis.get("kalorie"),
+                    "heart_rate": analysis.get("puls_sredni"),
+                    "points": points,
+                    "timestamp": timestamp
+                }
+            )
 
             return self.sheets_manager.add_activity(
                 username=display_name,
@@ -649,6 +769,10 @@ class BotOrchestrator:
                 if message.author == self.bot.user:
                     continue
 
+                # Pomiń wiadomości typu 19 (reply/odpowiedzi)
+                if message.type.value == 19:
+                    continue
+
                 # Sprawdź czy wiadomość ma zdjęcie LUB zawiera słowa kluczowe aktywności
                 has_image = self._is_message_eligible_for_analysis(message)
                 has_keywords = (
@@ -680,6 +804,9 @@ class BotOrchestrator:
             # KROK 3: Przetwarzaj tylko unikalne wiadomości
             processed, added, not_recognized = 0, 0, 0
 
+            # Odwróć kolejność aby przetwarzać od najstarszej do najnowszej
+            messages_to_process.reverse()
+
             for message in messages_to_process:
                 processed += 1
                 try:
@@ -695,17 +822,17 @@ class BotOrchestrator:
 
                     # PRIORYTET: Jeśli ma zdjęcie, ZAWSZE analizuj zdjęcie (wraz z tekstem jeśli istnieje)
                     if image_url:
-                        logger.debug(
+                        logger.info(
                             "Analyzing image from sync",
-                            extra={"message_id": message.id, "has_text": bool(message.content)},
+                            extra={"message_id": message.id, "discord_msg_id": message.id, "has_text": bool(message.content)},
                         )
                         # Dla synchronizacji nie przekazujemy historii (oszczędność tokenów)
                         analysis = self._analyze_image_with_gemini(image_url, message.content, None)
                     # Jeśli NIE MA zdjęcia ALE ma keywords, analizuj jako tekst
                     elif has_keywords:
-                        logger.debug(
+                        logger.info(
                             "Analyzing text from sync",
-                            extra={"message_id": message.id, "activity_type": has_keywords},
+                            extra={"message_id": message.id, "discord_msg_id": message.id, "activity_type": has_keywords},
                         )
                         analysis = await self._analyze_text_with_ai(message.content)
                     else:
@@ -776,9 +903,13 @@ class BotOrchestrator:
                                 logger.info(
                                     "Activity added from sync",
                                     extra={
+                                        "discord_msg_id": message.id,
                                         "activity_type": analysis["typ_aktywnosci"],
                                         "distance": analysis["dystans"],
+                                        "weight": analysis.get("obciazenie"),
+                                        "elevation": analysis.get("przewyzszenie"),
                                         "points": points,
+                                        "saved": saved
                                     },
                                 )
                     else:

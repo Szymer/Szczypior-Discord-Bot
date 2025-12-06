@@ -220,7 +220,7 @@ class SheetsManager:
                 distance_str,  # D: Dystans (km) - string z przecinkiem dla polskich Sheets
                 "",  # E: Przewyższenie (m) - puste
                 has_weight,  # F: Obciążenie > 5kg? - checkbox (boolean)
-                "",  # G: Spec Ops - puste
+                False,  # G: Spec Ops - checkbox (boolean, domyślnie False)
                 iid,  # I: IID - unikalny identyfikator wiadomości
             ]
 
@@ -352,6 +352,60 @@ class SheetsManager:
                     index=1,
                 )
                 logger.info("Headers added to spreadsheet")
+                
+            # Ustaw formatowanie kolumny F i G jako checkbox
+            try:
+                # Pobierz ID arkusza (sheet_id)
+                sheet_id = self.worksheet.id
+                
+                # Pobierz liczbę wierszy w arkuszu
+                all_values = self.worksheet.get_all_values()
+                num_rows = max(len(all_values), 1000) if all_values else 1000
+                
+                # Przygotuj request do batch_update
+                requests = [
+                    {
+                        "setDataValidation": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "startRowIndex": 1,  # Pomijamy nagłówek (wiersz 0)
+                                "endRowIndex": num_rows,
+                                "startColumnIndex": 5,  # Kolumna F (0-indexed)
+                                "endColumnIndex": 6
+                            },
+                            "rule": {
+                                "condition": {
+                                    "type": "BOOLEAN"
+                                },
+                                "showCustomUi": True
+                            }
+                        }
+                    },
+                    {
+                        "setDataValidation": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "startRowIndex": 1,  # Pomijamy nagłówek
+                                "endRowIndex": num_rows,
+                                "startColumnIndex": 6,  # Kolumna G (0-indexed)
+                                "endColumnIndex": 7
+                            },
+                            "rule": {
+                                "condition": {
+                                    "type": "BOOLEAN"
+                                },
+                                "showCustomUi": True
+                            }
+                        }
+                    }
+                ]
+                
+                # Wykonaj batch_update
+                self.spreadsheet.batch_update({"requests": requests})
+                logger.info("Columns F and G formatted as checkboxes")
+            except Exception as e:
+                logger.warning("Failed to format checkbox columns", exc_info=True)
+                
         except Exception as e:
             logger.error("Failed to setup headers", exc_info=True)
 

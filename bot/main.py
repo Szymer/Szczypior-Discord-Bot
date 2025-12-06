@@ -30,13 +30,37 @@ from .exceptions import ConfigurationError, SheetsError, LLMError
 load_dotenv()
 
 # Konfiguracja loggingu
+class ExtraFormatter(logging.Formatter):
+    """Formatter który wyświetla pola z extra jako JSON."""
+    def format(self, record):
+        # Pobierz standardowe formatowanie
+        message = super().format(record)
+        
+        # Dodaj pola extra jako JSON (jeśli są)
+        extra_fields = {k: v for k, v in record.__dict__.items() 
+                       if k not in ['name', 'msg', 'args', 'created', 'filename', 'funcName',
+                                   'levelname', 'levelno', 'lineno', 'module', 'msecs',
+                                   'message', 'pathname', 'process', 'processName',
+                                   'relativeCreated', 'thread', 'threadName', 'exc_info',
+                                   'exc_text', 'stack_info', 'asctime']}
+        
+        if extra_fields:
+            import json
+            message += f" | {json.dumps(extra_fields, ensure_ascii=False, default=str)}"
+        
+        return message
+
+formatter = ExtraFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(formatter)
+
+file_handler = logging.FileHandler('bot.log', encoding='utf-8')
+file_handler.setFormatter(formatter)
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log', encoding='utf-8')
-    ]
+    handlers=[console_handler, file_handler]
 )
 logger = logging.getLogger(__name__)
 
