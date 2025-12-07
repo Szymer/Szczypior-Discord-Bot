@@ -785,7 +785,7 @@ class BotOrchestrator:
             # ID wiadomości do debugowania
             DEBUG_MESSAGE_ID = 1445524947186356255
 
-            async for message in channel.history(limit=100):
+            async for message in channel.history(limit=500):
                 # DEBUG: Sprawdź konkretną wiadomość
                 if message.id == DEBUG_MESSAGE_ID:
                     logger.debug(
