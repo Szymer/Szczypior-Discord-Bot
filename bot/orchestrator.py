@@ -782,10 +782,22 @@ class BotOrchestrator:
             all_messages = []
             logger.info("Fetching messages from channel")
 
+            # Minimalna data wiadomości do synchronizacji (1 grudnia 2025)
+            from datetime import datetime, timezone
+            min_sync_date = datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc)
+
             # ID wiadomości do debugowania
             DEBUG_MESSAGE_ID = 1445524947186356255
 
             async for message in channel.history(limit=500):
+                # Sprawdź datę wiadomości - pomiń starsze niż 1 grudnia 2025
+                if message.created_at < min_sync_date:
+                    logger.debug(
+                        "Skipping message older than Dec 1, 2025",
+                        extra={"message_id": message.id, "created_at": message.created_at}
+                    )
+                    continue
+
                 # DEBUG: Sprawdź konkretną wiadomość
                 if message.id == DEBUG_MESSAGE_ID:
                     logger.debug(
