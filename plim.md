@@ -1,5 +1,13 @@
 # Propozycja refaktoryzacji Szczypior Discord Bot
 
+## Status: ✅ Implementacja fazy 1–2 zakończona
+
+**Branch:** `refactor-unified-analysis`  
+**Commit:** e23f508  
+**Testy:** ✅ 18/18 passed
+
+---
+
 ## Cele
 - Ujednolicenie analizy wiadomości (tekst/obraz) dla trybu live i synchronizacji startowej.
 - Upraszczanie klientów LLM do minimalnego, wielokrotnego użytku interfejsu.
@@ -108,6 +116,148 @@ Wpływ:
   - Mitigacja: przejściowe wrappery kompatybilności lub etapowa zmiana z deprecjacją.
 - Ryzyko: Fallback promptów może dawać mniej precyzyjne odpowiedzi.
   - Mitigacja: logowanie ostrzeżeń i szybka korekta w `config.json` bez releasu kodu.
+
+## Następne kroki
+- ✅ Zatwierdzono plan.
+- ✅ Zaimplementowano etap 1–2 w gałęzi `refactor-unified-analysis` i uruchomiono testy.
+- ⏳ Po walidacji, wdrożyć etapy 3–5 i zaktualizować testy.
+
+---
+
+## Zrealizowane zmiany (etap 1–2)
+
+### 1. Nowa metoda `analyze_content()`
+**Lokalizacja:** `bot/orchestrator.py`
+
+Utworzono jedną, scentralizowaną metodę do analizy treści (tekst i/lub obraz):
+```python
+async def analyze_content(
+    text: Optional[str] = None,
+    image_url: Optional[str] = None,
+    user_history: Optional[List[Dict[str, Any]]] = None
+) -> Optional[Dict[str, Any]]:
+```
+
+**Cechy:**
+- Obsługuje zarówno analizę obrazów jak i tekstu.
+- Wszystkie prompty pobierane wyłącznie z `config.json` przez `config_manager`.
+- Używa `system_instruction` przekazywany do LLM client.
+- Automatyczne retry dla obrazów o niskim kontraście (z lepszym modelem).
+- Wspólna walidacja wyników (brak typu aktywności lub dystansu → None).
+- Używana zarówno w trybie live (`handle_message`) jak i synchronizacji (`sync_chat_history`).
+
+### 2. Usunięte duplikaty
+**Usunięte metody:**
+- `_analyze_text_with_ai()` – zastąpiona przez `analyze_content()`
+- `_analyze_image_with_gemini()` – zastąpiona przez `analyze_content()`
+- `_build_activity_analysis_prompt()` – prompt building wbudowany w `analyze_content()`
+
+**Efekt:**
+- ~150 linii mniej kodu
+- Jeden punkt wejścia do analizy → łatwiejsze debugowanie i utrzymanie
+- Brak rozjazdu między live i sync
+
+### 3. Uproszczone klienty LLM
+**Zaktualizowane pliki:**
+- `bot/llm_clients/base_client.py`
+- `bot/llm_clients/gemini_client.py`
+- `bot/llm_clients/openai_client.py`
+- `bot/llm_clients/anthropic_client.py`
+
+**Zmiany:**
+- Dodano parametr `system_instruction: Optional[str]` do `generate_text()` i `analyze_image()`.
+- Wszystkie klienty mają teraz jednolity interfejs:
+  ```python
+  def generate_text(prompt, system_instruction=None) -> str
+  def analyze_image(image_url, prompt, system_instruction=None) -> Dict
+  ```
+- Klienty nie wiedzą o `config.json` – otrzymują gotowe prompty i system instruction.
+
+### 4. Refaktoryzacja `handle_message()`
+**Przed:**
+- Osobne ścieżki dla obrazów i tekstu
+- Duplikacja logiki reakcji emoji, pobierania historii, walidacji
+
+**Po:**
+- Jedna ścieżka używająca `analyze_content()`
+- Wspólna obsługa błędów
+- Mniej kodu, bardziej czytelne
+
+**Kod:**
+```python
+# Get user history
+user_history = sheets_manager.get_user_history(display_name) if sheets_manager else []
+
+# Get image URL if present
+image_url = self._get_image_url(message) if has_image else None
+
+# Use unified analysis
+analysis = await self.analyze_content(
+    text=message.content,
+    image_url=image_url,
+    user_history=user_history
+)
+```
+
+### 5. Refaktoryzacja `sync_chat_history()`
+**Przed:**
+- Osobne wywołania `_analyze_image_with_gemini()` i `_analyze_text_with_ai()`
+- Duplikacja walidacji i fallbacków
+
+**Po:**
+- Używa `analyze_content()` dla wszystkich wiadomości
+- Historia użytkownika pomijana w sync (oszczędność tokenów)
+- Ten sam kod walidacji co w trybie live
+
+### 6. Testy
+- Wszystkie 18 testów przeszły pomyślnie ✅
+- Brak regresji funkcjonalności
+- Pokrycie kodu: 22% (bez zmian, głównie brak testów integracyjnych)
+
+---
+
+## Korzyści osiągnięte
+
+### Redukcja złożoności
+- **-150 linii** kodu w `orchestrator.py`
+- **-3 metody** (usunięte duplikaty)
+- **1 punkt wejścia** zamiast 2 osobnych ścieżek analizy
+
+### Centralizacja
+- Wszystkie prompty **wyłącznie z config.json**
+- Brak "ukrytych" stringów promptów w kodzie
+- Łatwa zmiana promptów bez dotykania kodu Python
+
+### Wielokrotne użycie
+- Ta sama logika dla live i sync
+- Ten sam interfejs dla wszystkich LLM providerów
+- Łatwe dodanie nowych źródeł danych (np. voice messages)
+
+### Łatwość testowania
+- Jeden punkt do mockowania: `analyze_content()`
+- Klienty LLM są prostymi wrapperami SDK
+- Logika biznesowa oddzielona od SDK providerów
+
+---
+
+## Co dalej (etapy 3–5)
+
+### Etap 3: Validation promptów w config_manager
+- Dodać metodę `validate_prompts()` przy starcie bota
+- Sprawdzić czy wszystkie wymagane prompty są w `config.json`
+- Fallback do prostych, bezpiecznych komunikatów jeśli brakuje
+
+### Etap 4: Ujednolicenie embedów
+- Połączyć `create_activity_embed()` i `_create_response_embed()`
+- Jedna funkcja w `utils.py` dla wszystkich odpowiedzi
+- Konsystentne formatowanie
+
+### Etap 5: Dopracowanie `calculate_points()`
+- Domknąć wszystkie gałęzie return
+- Upewnić się że zawsze zwraca `(int, str)`
+- Dodać testy jednostkowe dla edge cases
+
+---
 
 ## Następne kroki
 - Zatwierdzić plan.
