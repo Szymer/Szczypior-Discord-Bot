@@ -22,15 +22,20 @@ class BaseLLMClient(ABC):
 
     @abstractmethod
     def generate_text(
-        self, prompt: str, temperature: float = 0.7, max_tokens: Optional[int] = None
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None, 
+        max_tokens: Optional[int] = None,
+        system_instruction: Optional[str] = None
     ) -> str:
         """
         Generuje tekst na podstawie promptu.
 
         Args:
             prompt: Prompt dla modelu.
-            temperature: Temperatura generowania.
-            max_tokens: Maksymalna liczba tokenów.
+            temperature: Temperatura generowania (opcjonalne).
+            max_tokens: Maksymalna liczba tokenów (opcjonalne).
+            system_instruction: Instrukcja systemowa dla modelu (opcjonalne).
 
         Returns:
             Wygenerowany tekst.
@@ -38,13 +43,19 @@ class BaseLLMClient(ABC):
         pass
 
     @abstractmethod
-    def analyze_image(self, image_url: str, prompt: str) -> Dict[str, Any]:
+    def analyze_image(
+        self, 
+        image_url: str, 
+        prompt: str,
+        system_instruction: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Analizuje obraz na podstawie dostarczonego promptu.
 
         Args:
             image_url: URL obrazu do analizy.
             prompt: Prompt zawierający instrukcje dla modelu.
+            system_instruction: Instrukcja systemowa dla modelu (opcjonalne).
 
         Returns:
             Słownik z przeanalizowanymi danymi.

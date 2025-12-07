@@ -121,9 +121,6 @@ class BotOrchestrator:
         if not text or len(text) < 5:
             return None
 
-        if not text or len(text) < 5:
-            return None
-
         text_lower = text.lower()
         for activity_type, keywords in self.activity_keywords.items():
             if any(keyword.lower() in text_lower for keyword in keywords):
@@ -136,85 +133,166 @@ class BotOrchestrator:
         logger.debug("No activity keywords matched", extra={"text_excerpt": text_lower[:80]})
         return None
 
-    async def _analyze_text_with_ai(self, text: str) -> Optional[Dict[str, Any]]:
+    async def analyze_content(
+        self,
+        text: Optional[str] = None,
+        image_url: Optional[str] = None,
+        user_history: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        Analizuje tekst wiadomości używając AI.
-
+        Unified method for analyzing content (text and/or image) for activity data.
+        
+        This method is used both for live message processing and startup sync.
+        All prompts are loaded from config.json via config_manager.
+        
         Args:
-            text: Tekst wiadomości
-
+            text: Optional text content to analyze
+            image_url: Optional image URL to analyze
+            user_history: Optional list of user's previous activities for context
+            
         Returns:
-            Słownik z danymi aktywności lub None
+            Dictionary with activity data or None if no activity detected.
+            Schema: {
+                'typ_aktywnosci': str,
+                'dystans': float,
+                'obciazenie': Optional[float],
+                'przewyzszenie': Optional[float],
+                'czas': Optional[float],
+                'tempo': Optional[str],
+                'puls_sredni': Optional[int],
+                'kalorie': Optional[int],
+                'komentarz': Optional[str]
+            }
         """
+        if not text and not image_url:
+            logger.warning("analyze_content called with no text and no image")
+            return None
+            
+        # Get provider and prompts from config
+        provider = config_manager.get_llm_provider()
+        system_prompt = config_manager.get_system_prompt(provider)
+        prompts = config_manager.get_llm_prompts(provider)
+        
+        # Format user history for context
+        user_history_text = "Brak wcześniejszych aktywności."
+        if user_history:
+            history_lines = [
+                f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} "
+                f"{parse_distance(act.get('Dystans (km)', 0))}km, {act.get('PUNKTY', '0')} pkt"
+                for act in user_history[-5:]  # Last 5 activities
+            ]
+            user_history_text = "\n".join(history_lines)
+        
         try:
-            # Pobierz globalny system_prompt i prompt dla text_analysis
-            provider = config_manager.get_llm_provider()
-            system_prompt = config_manager.get_system_prompt(provider)
-            prompts = config_manager.get_llm_prompts(provider)
-            
-            prompt_template = prompts.get("text_analysis")
-            if not prompt_template:
-                raise ConfigurationError(
-                    f"Missing 'text_analysis' prompt for provider '{provider}' in config.json"
+            # CASE 1: Image analysis (with optional text context)
+            if image_url:
+                prompt_template = prompts.get("activity_analysis")
+                if not prompt_template:
+                    logger.error(f"Missing 'activity_analysis' prompt for provider '{provider}'")
+                    return None
+                
+                user_prompt = prompt_template.format(
+                    text_context=text or "",
+                    user_history=user_history_text
                 )
-            
-            # Wypełnij szablon promptu
-            user_prompt = prompt_template.format(text=text)
-
-            # Wywołaj AI używając generate_text z system_instruction
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, 
-                lambda: self.gemini_client.generate_text(user_prompt, system_instruction=system_prompt)
-            )
-
-            if not response:
-                print("⚠️ AI nie zwróciło odpowiedzi")
-                return None
-
-            # Wyczyść odpowiedź z markdown
-            response_clean = response.strip().replace("```json", "").replace("```", "").strip()
-
-            # Parsuj odpowiedź JSON
-            result = json.loads(response_clean)
-
-            # Walidacja - sprawdź czy wykryto aktywność
-            if not result.get("typ_aktywnosci") or result.get("typ_aktywnosci") == "null":
+                
+                analysis_result = self.gemini_client.analyze_image(
+                    image_url,
+                    user_prompt,
+                    system_instruction=system_prompt
+                )
+                
                 logger.info(
-                    "AI did not detect activity in text",
-                    extra={"reason": result.get("komentarz", "no reason")},
+                    "AI image analysis result",
+                    extra={
+                        "text_context": text,
+                        "analysis": analysis_result
+                    }
                 )
-                return None
-
-            # Walidacja - musi być dystans
-            if not result.get("dystans") or result.get("dystans") == 0:
-                logger.info("AI did not find distance in text")
-                return None
-
-            # Loguj pełną odpowiedź AI dla analizy tekstu
-            logger.info(
-                "AI text analysis result",
-                extra={
-                    "text_excerpt": text[:100],
-                    "analysis": result
-                }
-            )
-
-            logger.info(
-                "AI recognized activity",
-                extra={"type": result["typ_aktywnosci"], "distance": result["dystans"]},
-            )
-            return result
-
+                
+                # Check for low contrast and retry with better model if needed
+                comment = analysis_result.get("komentarz", "")
+                is_low_contrast = any(
+                    phrase in comment.lower() 
+                    for phrase in ["nieczytelny", "niski kontrast", "low contrast"]
+                )
+                has_no_data = not analysis_result.get("dystans") and not analysis_result.get("czas")
+                
+                if is_low_contrast and has_no_data:
+                    logger.warning("Low contrast detected, retrying with better model")
+                    try:
+                        analysis_result = self.gemini_client.analyze_image_with_better_model(
+                            image_url,
+                            user_prompt,
+                            system_instruction=system_prompt,
+                            model_name="models/gemini-2.0-flash-exp"
+                        )
+                        logger.info("Retry with better model succeeded", extra={"analysis": analysis_result})
+                    except Exception as e:
+                        logger.warning("Better model retry failed, using original result", exc_info=True)
+                
+                # Validate result
+                if not analysis_result.get("typ_aktywnosci") or not analysis_result.get("dystans"):
+                    logger.info("Image analysis did not detect complete activity data")
+                    return None
+                    
+                return analysis_result
+            
+            # CASE 2: Text-only analysis
+            elif text:
+                prompt_template = prompts.get("text_analysis")
+                if not prompt_template:
+                    logger.error(f"Missing 'text_analysis' prompt for provider '{provider}'")
+                    return None
+                
+                user_prompt = prompt_template.format(text=text)
+                
+                # Execute in thread pool to avoid blocking
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.gemini_client.generate_text(user_prompt, system_instruction=system_prompt)
+                )
+                
+                if not response:
+                    logger.info("AI returned no response for text analysis")
+                    return None
+                
+                # Parse JSON response
+                response_clean = response.strip().replace("```json", "").replace("```", "").strip()
+                result = json.loads(response_clean)
+                
+                # Validate result
+                if not result.get("typ_aktywnosci") or result.get("typ_aktywnosci") == "null":
+                    logger.info(
+                        "AI did not detect activity in text",
+                        extra={"reason": result.get("komentarz", "no reason")}
+                    )
+                    return None
+                
+                if not result.get("dystans") or result.get("dystans") == 0:
+                    logger.info("AI did not find distance in text")
+                    return None
+                
+                logger.info(
+                    "AI text analysis result",
+                    extra={
+                        "text_excerpt": text[:100],
+                        "analysis": result
+                    }
+                )
+                
+                return result
+                
         except json.JSONDecodeError as e:
             logger.error(
                 "Failed to parse JSON from AI response",
                 exc_info=True,
-                extra={"response_preview": response_clean[:200]},
+                extra={"response_preview": response_clean[:200] if 'response_clean' in locals() else "N/A"}
             )
             return None
-        except (AttributeError, KeyError) as e:
-            logger.error("Invalid response structure from AI", exc_info=True)
+        except Exception as e:
+            logger.error("Content analysis failed", exc_info=True)
             return None
 
     def _activity_already_exists(self, message: discord.Message) -> bool:
@@ -277,94 +355,55 @@ class BotOrchestrator:
                 await message.add_reaction("✅")
             return
 
-        # PRIORYTET 2: Analiza obrazu (ZAWSZE Z TEKSTEM jeśli dostępny)
-        if has_image:
-            logger.info(
-                "Processing image message",
-                extra={
-                    "message_id": message.id,
-                    "discord_msg_id": message.id,
-                    "has_text": bool(message.content),
-                    "author": str(message.author)
-                },
-            )
-            await message.add_reaction("🤔")
-
-            try:
-                image_url = self._get_image_url(message)
-                if not image_url:
-                    await message.remove_reaction("🤔", self.bot.user)
-                    return
-
-                # Pobierz historię użytkownika dla kontekstu
-                user_history_text = ""
-                if self.sheets_manager:
-                    display_name = get_display_name(message.author)
-                    user_activities = self.sheets_manager.get_user_history(display_name)
-                    if user_activities:
-                        recent = user_activities[-5:]  # Ostatnie 5 aktywności
-                        history_lines = [
-                            f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} "
-                            f"{parse_distance(act.get('Dystans (km)', 0))}km, {act.get('PUNKTY', '0')} pkt"
-                            for act in recent
-                        ]
-                        user_history_text = "\n".join(history_lines)
-
-                # Analiza obrazu przez Gemini (ZAWSZE przekazuj tekst jeśli istnieje)
-                analysis = self._analyze_image_with_gemini(
-                    image_url, message.content, user_history_text
-                )
-
-                # Sprawdź czy mamy podstawowe dane (typ i dystans)
-                has_basic_data = (
-                    analysis and analysis.get("typ_aktywnosci") and analysis.get("dystans")
-                )
-
-                if not has_basic_data:
-                    logger.warning("Image does not contain complete activity data", extra={"message_id": message.id})
-                    await message.remove_reaction("🤔", self.bot.user)
-                    await message.add_reaction("❓")
-                    return
-
-                await self._process_successful_analysis(message, analysis)
-                return
-            except LLMAnalysisError as e:
-                logger.error("Image analysis failed", extra={"message_id": message.id}, exc_info=True)
-                await message.remove_reaction("🤔", self.bot.user)
-                await message.add_reaction("❓")
-                return
-
-        # PRIORYTET 3: Analiza TYLKO tekstu (fallback gdy nie ma obrazu)
-        if not has_activity_keywords:
+        # Skip if no activity indicators
+        if not has_activity_keywords and not has_image:
             return
 
+        # Log what we're processing
         logger.info(
-            "Detected activity keywords in text",
+            "Processing activity message",
             extra={
                 "message_id": message.id,
-                "discord_msg_id": message.id,
-                "activity_type": has_activity_keywords,
+                "has_keywords": bool(has_activity_keywords),
+                "has_image": bool(has_image),
                 "author": str(message.author)
-            },
+            }
         )
+        
         await message.add_reaction("🤔")
 
         try:
-            # Analizuj tekst używając AI
-            analysis_result = await self._analyze_text_with_ai(message.content)
+            # Get user history for context
+            user_history = []
+            if self.sheets_manager:
+                display_name = get_display_name(message.author)
+                user_history = self.sheets_manager.get_user_history(display_name)
+            
+            # Get image URL if present
+            image_url = self._get_image_url(message) if has_image else None
+            
+            # Use unified analysis method
+            analysis = await self.analyze_content(
+                text=message.content,
+                image_url=image_url,
+                user_history=user_history
+            )
 
-            if not analysis_result:
+            if not analysis:
                 await message.remove_reaction("🤔", self.bot.user)
                 await message.add_reaction("❓")
                 return
 
-            await self._process_successful_analysis(message, analysis_result)
-            return
-        except LLMAnalysisError as e:
-            logger.error("Text analysis failed", extra={"message_id": message.id}, exc_info=True)
+            await self._process_successful_analysis(message, analysis)
+            
+        except Exception as e:
+            logger.error(
+                "Message analysis failed",
+                extra={"message_id": message.id},
+                exc_info=True
+            )
             await message.remove_reaction("🤔", self.bot.user)
             await message.add_reaction("❓")
-            return
 
     def _is_message_eligible_for_analysis(self, message: discord.Message) -> bool:
         """Sprawdza, czy wiadomość powinna być analizowana."""
@@ -392,83 +431,6 @@ class BotOrchestrator:
             ):
                 return attachment.url
         return None
-
-    def _analyze_image_with_gemini(
-        self, image_url: str, text_context: Optional[str], user_history: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Tworzy prompt i wywołuje analizę obrazu w LLM Client."""
-        # Pobierz globalny system_prompt i prompt dla activity_analysis
-        provider = config_manager.get_llm_provider()
-        system_prompt = config_manager.get_system_prompt(provider)
-        prompts = config_manager.get_llm_prompts(provider)
-        activity_analysis_prompt = prompts.get("activity_analysis", "")
-        
-        # Buduj user prompt z kontekstem
-        user_prompt = activity_analysis_prompt.format(
-            text_context=text_context or "",
-            user_history=user_history or "Brak wcześniejszych aktywności."
-        )
-        
-        # Wywołaj analyze_image z system_instruction
-        analysis_result = self.gemini_client.analyze_image(
-            image_url, 
-            user_prompt,
-            system_instruction=system_prompt
-        )
-        
-        # Loguj pełną odpowiedź AI
-        logger.info(
-            "AI image analysis result",
-            extra={
-                "text_context": text_context,
-                "analysis": analysis_result
-            }
-        )
-        
-        # Sprawdź czy gemini-flash-lite nie poradził sobie z kontrastem
-        comment = analysis_result.get("komentarz", "")
-        is_low_contrast = (
-            "nieczytelny" in comment.lower() or 
-            "niski kontrast" in comment.lower() or
-            "low contrast" in comment.lower()
-        )
-        
-        has_no_data = not analysis_result.get("dystans") and not analysis_result.get("czas")
-        
-        # Jeśli flash-lite nie poradził sobie z kontrastem, spróbuj z lepszym modelem
-        if is_low_contrast and has_no_data:
-            logger.warning(
-                "Low contrast detected, retrying with Gemini 2.5 Pro",
-                extra={"original_comment": comment}
-            )
-            
-            try:
-                # Użyj lepszego modelu (Gemini 2.5 Flash)
-                analysis_result_pro = self.gemini_client.analyze_image_with_better_model(
-                    image_url,
-                    user_prompt,
-                    system_instruction=system_prompt,
-                    better_model="models/gemini-2.5-flash"
-                )
-                
-                logger.info(
-                    "AI image analysis result (Gemini Pro retry)",
-                    extra={
-                        "text_context": text_context,
-                        "analysis": analysis_result_pro
-                    }
-                )
-                
-                return analysis_result_pro
-            except Exception as e:
-                logger.error(
-                    "Failed to analyze with better model",
-                    extra={"error": str(e)}
-                )
-                # Zwróć oryginalny wynik jeśli retry się nie udało
-                return analysis_result
-        
-        return analysis_result
 
     async def _process_successful_analysis(
         self, message: discord.Message, analysis: Dict[str, Any]
@@ -856,34 +818,15 @@ class BotOrchestrator:
             for message in messages_to_process:
                 processed += 1
                 try:
-                    # Sprawdź czy ma zdjęcie i/lub tekst
+                    # Get image URL if present
                     image_url = self._get_image_url(message)
-                    has_keywords = (
-                        self._detect_activity_type_from_text(message.content)
-                        if message.content
-                        else None
+                    
+                    # Use unified analysis method (no history for sync to save tokens)
+                    analysis = await self.analyze_content(
+                        text=message.content,
+                        image_url=image_url,
+                        user_history=None  # Skip history during sync to save tokens
                     )
-
-                    analysis = None
-
-                    # PRIORYTET: Jeśli ma zdjęcie, ZAWSZE analizuj zdjęcie (wraz z tekstem jeśli istnieje)
-                    if image_url:
-                        logger.info(
-                            "Analyzing image from sync",
-                            extra={"message_id": message.id, "discord_msg_id": message.id, "has_text": bool(message.content)},
-                        )
-                        # Dla synchronizacji nie przekazujemy historii (oszczędność tokenów)
-                        analysis = self._analyze_image_with_gemini(image_url, message.content, None)
-                    # Jeśli NIE MA zdjęcia ALE ma keywords, analizuj jako tekst
-                    elif has_keywords:
-                        logger.info(
-                            "Analyzing text from sync",
-                            extra={"message_id": message.id, "discord_msg_id": message.id, "activity_type": has_keywords},
-                        )
-                        analysis = await self._analyze_text_with_ai(message.content)
-                    else:
-                        # Ani zdjęcia, ani keywords - nie powinno się zdarzyć (filtrowane w KROK 1)
-                        continue
 
                     if not analysis:
                         not_recognized += 1
@@ -983,29 +926,6 @@ class BotOrchestrator:
 
         except Exception as e:
             logger.error("Critical sync error", exc_info=True)
-
-    def _build_activity_analysis_prompt(
-        self, text_context: Optional[str], user_history: Optional[str] = None
-    ) -> str:
-        """Buduje prompt do analizy aktywności na podstawie obrazu, tekstu i historii użytkownika."""
-        # Pobierz prompt z konfiguracji
-        provider = config_manager.get_llm_provider()
-        prompts = config_manager.get_llm_prompts(provider)
-
-        base_prompt = prompts.get("activity_analysis")
-        if not base_prompt:
-            raise ConfigurationError(
-                f"Missing 'activity_analysis' prompt for provider '{provider}' in config.json"
-            )
-
-        if text_context:
-            user_prompt = prompts.get("user_prompt_with_context", "{system_prompt}")
-            return user_prompt.format(
-                text_context=text_context or "",
-                user_history=user_history or "Brak wcześniejszych aktywności.",
-                system_prompt=base_prompt,
-            )
-        return base_prompt
 
     def _build_motivational_comment_prompt(
         self, current_activity: Dict[str, Any], previous_activities: List[Dict[str, Any]]

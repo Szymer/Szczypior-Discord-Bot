@@ -14,14 +14,23 @@ class AnthropicClient(BaseLLMClient):
         print(f"AnthropicClient zainicjalizowany (placeholder) z modelem: {self.model_name}")
 
     def generate_text(
-        self, prompt: str, temperature: float = 0.7, max_tokens: Optional[int] = 2048
+        self, 
+        prompt: str, 
+        temperature: Optional[float] = None, 
+        max_tokens: Optional[int] = None,
+        system_instruction: Optional[str] = None
     ) -> str:
         # Logika wywołania API Anthropic do generowania tekstu
         raise NotImplementedError(
             "Metoda `generate_text` nie jest zaimplementowana dla AnthropicClient."
         )
 
-    def analyze_image(self, image_url: str, prompt: str) -> Dict[str, Any]:
+    def analyze_image(
+        self, 
+        image_url: str, 
+        prompt: str,
+        system_instruction: Optional[str] = None
+    ) -> Dict[str, Any]:
         # Logika wywołania API Anthropic do analizy obrazu
         raise NotImplementedError(
             "Metoda `analyze_image` nie jest zaimplementowana dla AnthropicClient."
