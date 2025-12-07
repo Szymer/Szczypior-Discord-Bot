@@ -239,10 +239,9 @@ class SheetsManager:
             has_data_in_last_row = any(cell.strip() for cell in last_row_data)
 
             if has_data_in_last_row:
-                # Ostatni wiersz ma dane - dodaj nowy wiersz
-                next_row = len(all_values) + 1
-                # Rozszerz arkusz o jeden wiersz
+                # Ostatni wiersz ma dane - najpierw dodaj nowy wiersz
                 self.worksheet.add_rows(1)
+                next_row = len(all_values) + 1
             else:
                 # Ostatni wiersz jest pusty - użyj go
                 next_row = len(all_values)
