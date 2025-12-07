@@ -133,6 +133,11 @@ async def on_message(message):
     if message.author == bot.user:
         return
     
+    # Filtruj tylko wiadomości z monitorowanego kanału
+    monitored_channel_id = os.getenv("MONITORED_CHANNEL_ID")
+    if monitored_channel_id and str(message.channel.id) != monitored_channel_id:
+        return
+    
     # Przetwarzaj komendy (!)
     await bot.process_commands(message)
     
