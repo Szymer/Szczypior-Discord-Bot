@@ -607,6 +607,7 @@ class BotOrchestrator:
                 activity_type=analysis["typ_aktywnosci"],
                 distance=float(analysis["dystans"]),
                 has_weight=has_weight,
+                elevation=float(analysis.get("przewyzszenie") or 0) if analysis.get("przewyzszenie") else None,
                 timestamp=timestamp,
                 message_id=str(message.id),
                 message_timestamp=str(int(message.created_at.timestamp())),

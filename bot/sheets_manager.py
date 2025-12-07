@@ -164,6 +164,7 @@ class SheetsManager:
         activity_type: str,
         distance: float,
         has_weight: bool = False,
+        elevation: Optional[float] = None,
         timestamp: Optional[str] = None,
         message_id: Optional[str] = None,
         message_timestamp: Optional[str] = None,
@@ -176,7 +177,7 @@ class SheetsManager:
         B: Nick
         C: Rodzaj Aktywności
         D: Dystans (km)
-        E: Przewyższenie (m) - puste
+        E: Przewyższenie (m)
         F: Obciążenie > 5kg? - TRUE/FALSE
         G: Spec Ops - puste
         H: PUNKTY - puste (obliczane przez arkusz)
@@ -187,6 +188,7 @@ class SheetsManager:
             activity_type: Typ aktywności (musi pasować do listy w arkuszu)
             distance: Dystans w km
             has_weight: Czy ma obciążenie > 5kg (bool)
+            elevation: Przewyższenie w metrach (opcjonalne)
             timestamp: Znacznik czasu aktywności (domyślnie teraz)
             message_id: ID wiadomości Discord
             message_timestamp: Timestamp wiadomości Discord
@@ -212,13 +214,18 @@ class SheetsManager:
 
             # Formatuj dystans jako string z kropką dziesiętną (dla polskiego Google Sheets)
             distance_str = str(float(distance)).replace(".", ",")
+            
+            # Formatuj przewyższenie jeśli istnieje
+            elevation_str = ""
+            if elevation is not None and elevation > 0:
+                elevation_str = str(int(elevation))
 
             row = [
                 timestamp,  # A: Data
                 username,  # B: Nick
                 normalized_activity,  # C: Rodzaj Aktywności
                 distance_str,  # D: Dystans (km) - string z przecinkiem dla polskich Sheets
-                "",  # E: Przewyższenie (m) - puste
+                elevation_str,  # E: Przewyższenie (m)
                 has_weight,  # F: Obciążenie > 5kg? - checkbox (boolean)
                 False,  # G: Spec Ops - checkbox (boolean, domyślnie False)
                 iid,  # I: IID - unikalny identyfikator wiadomości
