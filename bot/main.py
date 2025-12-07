@@ -230,6 +230,7 @@ async def add_activity(ctx, activity_type: str, distance: float,
     info = ACTIVITY_TYPES[activity_type]
     username = get_display_name(ctx.author)
     saved = False
+    actual_points = points  # Domyślnie używamy lokalnie obliczonych punktów
     
     if sheets_manager:
         try:
@@ -239,15 +240,22 @@ async def add_activity(ctx, activity_type: str, distance: float,
             # Stwórz timestamp jako int (zgodnie z formatem IID)
             timestamp_int = int(ctx.message.created_at.timestamp())
             
-            saved = sheets_manager.add_activity(
+            saved, row_number = sheets_manager.add_activity(
                 username=username,
                 activity_type=activity_type,
                 distance=distance,
                 has_weight=has_weight,
+                elevation=elevation,
                 timestamp=None,
                 message_id=str(ctx.message.id),
                 message_timestamp=str(timestamp_int)
             )
+            
+            # Jeśli zapisano, pobierz punkty z arkusza
+            if saved and row_number > 0:
+                sheet_points = sheets_manager.get_points_from_row(row_number)
+                if sheet_points is not None:
+                    actual_points = sheet_points
         except Exception as e:
             print(f"Błąd zapisu do Sheets: {e}")
     
@@ -263,7 +271,7 @@ async def add_activity(ctx, activity_type: str, distance: float,
         activity_info=info,
         username=ctx.author.mention,
         distance=distance,
-        points=points,
+        points=actual_points,
         additional_fields=additional_fields,
         saved=saved
     )

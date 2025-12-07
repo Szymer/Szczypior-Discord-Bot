@@ -476,8 +476,6 @@ class BotOrchestrator:
         """Obsługuje logikę po pomyślnej analizie obrazu."""
         activity_type = analysis["typ_aktywnosci"]
         distance = float(analysis["dystans"])
-        weight = float(analysis.get("obciazenie") or 0)
-        elevation = float(analysis.get("przewyzszenie") or 0)
         
         logger.info(
             "Successful activity analysis",
@@ -489,33 +487,68 @@ class BotOrchestrator:
             }
         )
 
-        points, error_msg = self.calculate_points(
-            activity_type,
-            distance,
-            weight if weight > 0 else None,
-            elevation if elevation > 0 else None,
-        )
-
-        if error_msg or points <= 0:
+        # Walidacja - sprawdź czy typ aktywności istnieje i czy spełnia minimalne wymagania
+        if activity_type not in ACTIVITY_TYPES:
             await message.remove_reaction("🤔", self.bot.user)
+            logger.warning("Unknown activity type", extra={"activity_type": activity_type})
+            return
+
+        # Sprawdź minimalny dystans (dla walidacji przed zapisem)
+        activity_info = ACTIVITY_TYPES[activity_type]
+        min_distance = activity_info.get("min_distance", 0)
+        if distance < min_distance:
+            await message.remove_reaction("🤔", self.bot.user)
+            logger.info(
+                "Distance below minimum",
+                extra={"distance": distance, "min_distance": min_distance}
+            )
             return
 
         await message.remove_reaction("🤔", self.bot.user)
 
-        # Generowanie komentarza
+        # Zapis do arkusza - arkusz obliczy punkty
+        saved, row_number = self._save_activity_to_sheets(message, analysis)
+        
+        if not saved or row_number == 0:
+            logger.error("Failed to save activity", extra={"discord_msg_id": message.id})
+            # Wysłanie komunikatu o błędzie
+            embed = discord.Embed(
+                title="❌ Błąd zapisu",
+                description="Nie udało się zapisać aktywności do arkusza.",
+                color=discord.Color.red()
+            )
+            await message.reply(embed=embed)
+            return
+        
+        # Pobierz punkty z arkusza (obliczone przez formułę)
+        points = self.sheets_manager.get_points_from_row(row_number)
+        
+        if points is None or points == 0:
+            logger.warning(
+                "No points calculated by sheet",
+                extra={"discord_msg_id": message.id, "row": row_number}
+            )
+            # Jeśli arkusz zwrócił 0 punktów, nie pokazuj aktywności
+            embed = discord.Embed(
+                title="⚠️ Aktywność nie spełnia wymagań",
+                description="Aktywność została zapisana, ale nie uzyskano punktów (prawdopodobnie dystans poniżej minimum).",
+                color=discord.Color.orange()
+            )
+            await message.reply(embed=embed)
+            return
+
+        logger.info(
+            "Activity saved to Sheets with points",
+            extra={"discord_msg_id": message.id, "points": points, "row": row_number}
+        )
+
+        # Generowanie komentarza (z punktami z arkusza)
         ai_comment = self._generate_motivational_comment(
             message.author, activity_type, distance, points
         )
 
-        # Zapis do arkusza
-        saved = self._save_activity_to_sheets(message, analysis, points, ai_comment)
-        logger.info(
-            "Activity saved to Sheets",
-            extra={"discord_msg_id": message.id, "points": points, "saved": saved}
-        )
-
         # Wysyłanie odpowiedzi
-        embed = self._create_response_embed(message, analysis, points, ai_comment, saved)
+        embed = self._create_response_embed(message, analysis, points, ai_comment, True)
         await message.reply(embed=embed)
         await message.add_reaction("✅")
 
@@ -559,19 +592,20 @@ class BotOrchestrator:
             return "Dobra robota!"  # Fallback
 
     def _save_activity_to_sheets(
-        self, message: discord.Message, analysis: Dict[str, Any], points: int, ai_comment: str
-    ) -> bool:
+        self, message: discord.Message, analysis: Dict[str, Any]
+    ) -> tuple[bool, int]:
         """
         Zapisuje aktywność do Google Sheets.
 
         Args:
             message: Wiadomość Discord
             analysis: Analiza aktywności
-            points: Punkty za aktywność (nie używane - punkty obliczane przez arkusz)
-            ai_comment: Komentarz AI (nie zapisywany do arkusza)
+
+        Returns:
+            Tuple (success: bool, row_number: int) - True i numer wiersza jeśli sukces, (False, 0) w przeciwnym razie
         """
         if not self.sheets_manager:
-            return False
+            return (False, 0)
         try:
             timestamp = message.created_at.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -597,7 +631,6 @@ class BotOrchestrator:
                     "pace": analysis.get("tempo"),
                     "calories": analysis.get("kalorie"),
                     "heart_rate": analysis.get("puls_sredni"),
-                    "points": points,
                     "timestamp": timestamp
                 }
             )
@@ -616,7 +649,7 @@ class BotOrchestrator:
             logger.error(
                 "Failed to save activity to Sheets", exc_info=True, extra={"user": display_name}
             )
-            return False
+            return (False, 0)
 
     def _create_response_embed(
         self,
@@ -888,18 +921,13 @@ class BotOrchestrator:
 
                     if has_basic_data:
                         # Zapisz aktywność (IID automatycznie dodane do cache w add_activity)
-                        points, error_msg = self.calculate_points(
-                            analysis["typ_aktywnosci"],
-                            float(analysis["dystans"]),
-                            float(analysis.get("obciazenie") or 0) or None,
-                            float(analysis.get("przewyzszenie") or 0) or None,
-                        )
-
-                        if not error_msg and points > 0:
-                            saved = self._save_activity_to_sheets(
-                                message, analysis, points, f"[SYNC] {analysis.get('komentarz', '')}"
-                            )
-                            if saved:
+                        # Arkusz obliczy punkty
+                        saved, row_number = self._save_activity_to_sheets(message, analysis)
+                        
+                        if saved and row_number > 0:
+                            # Pobierz punkty z arkusza
+                            points = self.sheets_manager.get_points_from_row(row_number)
+                            if points and points > 0:
                                 added += 1
                                 logger.info(
                                     "Activity added from sync",
@@ -910,7 +938,7 @@ class BotOrchestrator:
                                         "weight": analysis.get("obciazenie"),
                                         "elevation": analysis.get("przewyzszenie"),
                                         "points": points,
-                                        "saved": saved
+                                        "row": row_number
                                     },
                                 )
                     else:

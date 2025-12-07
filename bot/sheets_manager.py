@@ -194,7 +194,7 @@ class SheetsManager:
             message_timestamp: Timestamp wiadomości Discord
 
         Returns:
-            True jeśli sukces, False w przeciwnym razie
+            Tuple (success: bool, row_number: int) - True i numer wiersza jeśli sukces, (False, 0) w przeciwnym razie
         """
         try:
             if timestamp is None:
@@ -308,12 +308,54 @@ class SheetsManager:
                     "username": username,
                     "activity_type": normalized_activity,
                     "distance": distance,
+                    "row_number": last_row,
                 },
             )
-            return True
+            return (True, last_row)
         except Exception as e:
             logger.error("Failed to add activity", exc_info=True, extra={"username": username})
-            return False
+            return (False, 0)
+
+    def get_points_from_row(self, row_number: int) -> Optional[int]:
+        """
+        Pobiera punkty z konkretnego wiersza arkusza (kolumna H).
+        
+        Args:
+            row_number: Numer wiersza w arkuszu
+            
+        Returns:
+            Liczba punktów lub None jeśli błąd
+        """
+        try:
+            # Poczekaj chwilę żeby formuła się przeliczyła
+            import time
+            time.sleep(0.5)
+            
+            # Pobierz wartość z kolumny H (PUNKTY)
+            cell_value = self.worksheet.acell(f"H{row_number}").value
+            
+            if cell_value and cell_value.strip():
+                # Usuń spacje i przecinki, zamień na int
+                points_str = cell_value.replace(" ", "").replace(",", "")
+                points = int(float(points_str))
+                logger.info(
+                    "Points fetched from sheet",
+                    extra={"row": row_number, "points": points}
+                )
+                return points
+            else:
+                logger.warning(
+                    "No points value in sheet",
+                    extra={"row": row_number, "cell_value": cell_value}
+                )
+                return None
+        except Exception as e:
+            logger.error(
+                "Failed to fetch points from sheet",
+                exc_info=True,
+                extra={"row": row_number}
+            )
+            return None
 
     def get_user_total_points(self, username: str) -> int:
         """
