@@ -9,6 +9,7 @@ credentials.json
 *credentials*.json
 authorized_user.json
 token.json
+service_account.json
 
 # Środowiska wirtualne Python
 venv/
