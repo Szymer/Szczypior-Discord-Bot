@@ -122,6 +122,15 @@ class BotOrchestrator:
             return None
 
         text_lower = text.lower()
+
+        # Special rule: if message contains 'ASG', classify as 'inne cardio'
+        # Handles typical variants and ignores case/spaces
+        if "asg" in text_lower:
+            logger.debug(
+                "ASG keyword detected; forcing activity to inne cardio",
+                extra={"text_excerpt": text_lower[:80]},
+            )
+            return "inne cardio"
         for activity_type, keywords in self.activity_keywords.items():
             if any(keyword.lower() in text_lower for keyword in keywords):
                 logger.debug(
@@ -173,15 +182,40 @@ class BotOrchestrator:
         system_prompt = config_manager.get_system_prompt(provider)
         prompts = config_manager.get_llm_prompts(provider)
         
-        # Format user history for context
+        # Format user history for context (text and structured JSON)
         user_history_text = "Brak wcześniejszych aktywności."
+        user_history_json_str = json.dumps({"user_history": []}, ensure_ascii=False)
         if user_history:
+            # Build last 5 entries as readable text
             history_lines = [
                 f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} "
                 f"{parse_distance(act.get('Dystans (km)', 0))}km, {act.get('PUNKTY', '0')} pkt"
-                for act in user_history[-5:]  # Last 5 activities
+                for act in user_history[-5:]
             ]
             user_history_text = "\n".join(history_lines)
+
+            # Build structured JSON for model consumption
+            def _to_float(v):
+                try:
+                    return float(str(v).replace(',', '.')) if v not in (None, "") else None
+                except Exception:
+                    return None
+
+            history_struct = []
+            for act in user_history[-5:]:
+                history_struct.append({
+                    "date": act.get("Data"),
+                    "type": act.get("Rodzaj Aktywności"),
+                    "distance_km": _to_float(act.get("Dystans (km)", None)),
+                    "time": act.get("Czas"),
+                    "pace": act.get("Tempo"),
+                    "avg_hr": act.get("Puls Średni"),
+                    "elevation_gain_m": _to_float(act.get("Przewyższenie (m)", None)),
+                    "load": _to_float(act.get("Obciążenie", None)),
+                    "points": act.get("PUNKTY")
+                })
+
+            user_history_json_str = json.dumps({"user_history": history_struct}, ensure_ascii=False)
         
         try:
             # CASE 1: Image analysis (with optional text context)
@@ -191,9 +225,11 @@ class BotOrchestrator:
                     logger.error(f"Missing 'activity_analysis' prompt for provider '{provider}'")
                     return None
                 
+                # Provide both text summary and structured JSON for better reliability
                 user_prompt = prompt_template.format(
                     text_context=text or "",
-                    user_history=user_history_text
+                    user_history=user_history_text,
+                    user_history_json=user_history_json_str
                 )
                 
                 analysis_result = self.gemini_client.analyze_image(
@@ -245,7 +281,12 @@ class BotOrchestrator:
                     logger.error(f"Missing 'text_analysis' prompt for provider '{provider}'")
                     return None
                 
-                user_prompt = prompt_template.format(text=text)
+                # Include user history JSON to help contextual text analysis
+                user_prompt = prompt_template.format(
+                    text=text,
+                    user_history_json=user_history_json_str,
+                    user_history=user_history_text
+                )
                 
                 # Execute in thread pool to avoid blocking
                 loop = asyncio.get_event_loop()
