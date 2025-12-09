@@ -122,15 +122,6 @@ class BotOrchestrator:
             return None
 
         text_lower = text.lower()
-
-        # Special rule: if message contains 'ASG', classify as 'inne cardio'
-        # Handles typical variants and ignores case/spaces
-        if "asg" in text_lower:
-            logger.debug(
-                "ASG keyword detected; forcing activity to inne cardio",
-                extra={"text_excerpt": text_lower[:80]},
-            )
-            return "inne cardio"
         for activity_type, keywords in self.activity_keywords.items():
             if any(keyword.lower() in text_lower for keyword in keywords):
                 logger.debug(
@@ -182,40 +173,15 @@ class BotOrchestrator:
         system_prompt = config_manager.get_system_prompt(provider)
         prompts = config_manager.get_llm_prompts(provider)
         
-        # Format user history for context (text and structured JSON)
+        # Format user history for context
         user_history_text = "Brak wcześniejszych aktywności."
-        user_history_json_str = json.dumps({"user_history": []}, ensure_ascii=False)
         if user_history:
-            # Build last 5 entries as readable text
             history_lines = [
                 f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} "
                 f"{parse_distance(act.get('Dystans (km)', 0))}km, {act.get('PUNKTY', '0')} pkt"
-                for act in user_history[-5:]
+                for act in user_history[-5:]  # Last 5 activities
             ]
             user_history_text = "\n".join(history_lines)
-
-            # Build structured JSON for model consumption
-            def _to_float(v):
-                try:
-                    return float(str(v).replace(',', '.')) if v not in (None, "") else None
-                except Exception:
-                    return None
-
-            history_struct = []
-            for act in user_history[-5:]:
-                history_struct.append({
-                    "date": act.get("Data"),
-                    "type": act.get("Rodzaj Aktywności"),
-                    "distance_km": _to_float(act.get("Dystans (km)", None)),
-                    "time": act.get("Czas"),
-                    "pace": act.get("Tempo"),
-                    "avg_hr": act.get("Puls Średni"),
-                    "elevation_gain_m": _to_float(act.get("Przewyższenie (m)", None)),
-                    "load": _to_float(act.get("Obciążenie", None)),
-                    "points": act.get("PUNKTY")
-                })
-
-            user_history_json_str = json.dumps({"user_history": history_struct}, ensure_ascii=False)
         
         try:
             # CASE 1: Image analysis (with optional text context)
@@ -225,11 +191,9 @@ class BotOrchestrator:
                     logger.error(f"Missing 'activity_analysis' prompt for provider '{provider}'")
                     return None
                 
-                # Provide both text summary and structured JSON for better reliability
                 user_prompt = prompt_template.format(
                     text_context=text or "",
-                    user_history=user_history_text,
-                    user_history_json=user_history_json_str
+                    user_history=user_history_text
                 )
                 
                 analysis_result = self.gemini_client.analyze_image(
@@ -281,12 +245,7 @@ class BotOrchestrator:
                     logger.error(f"Missing 'text_analysis' prompt for provider '{provider}'")
                     return None
                 
-                # Include user history JSON to help contextual text analysis
-                user_prompt = prompt_template.format(
-                    text=text,
-                    user_history_json=user_history_json_str,
-                    user_history=user_history_text
-                )
+                user_prompt = prompt_template.format(text=text)
                 
                 # Execute in thread pool to avoid blocking
                 loop = asyncio.get_event_loop()
@@ -560,16 +519,40 @@ class BotOrchestrator:
     ) -> str:
         """Pobiera historię, buduje prompt i generuje komentarz motywacyjny."""
         user_history = []
+        display_name = get_display_name(author)
+        
+        logger.info(
+            "🔍 DEBUG: Starting motivational comment generation",
+            extra={
+                "user": display_name,
+                "activity_type": activity_type,
+                "distance": distance,
+                "points": points
+            }
+        )
+        
         if self.sheets_manager:
             try:
-                display_name = author.global_name if author.global_name else str(author)
                 user_history = self.sheets_manager.get_user_history(display_name)
+                logger.info(
+                    "🔍 DEBUG: User history fetched",
+                    extra={
+                        "user": display_name,
+                        "history_count": len(user_history),
+                        "history_sample": user_history[:2] if user_history else "empty"
+                    }
+                )
             except Exception as e:
                 logger.warning(
                     "Failed to fetch user history for motivational comment",
                     exc_info=True,
-                    extra={"user": str(author)},
+                    extra={"user": display_name},
                 )
+        else:
+            logger.warning(
+                "🔍 DEBUG: sheets_manager is None - no history available",
+                extra={"user": display_name}
+            )
 
         current_activity_summary = {
             "typ_aktywnosci": activity_type,
@@ -607,6 +590,15 @@ class BotOrchestrator:
         Returns:
             Tuple (success: bool, row_number: int) - True i numer wiersza jeśli sukces, (False, 0) w przeciwnym razie
         """
+        # Tryb DEBUG - nie zapisuj do arkusza
+        if config_manager.is_debug_mode():
+            logger.warning(
+                "🔍 DEBUG MODE: Skipping save to Google Sheets",
+                extra={"message_id": message.id, "analysis": analysis}
+            )
+            # Zwróć fake success z row_number=999 dla celów testowych
+            return (True, 999)
+        
         if not self.sheets_manager:
             return (False, 0)
         try:
@@ -972,9 +964,23 @@ class BotOrchestrator:
         self, current_activity: Dict[str, Any], previous_activities: List[Dict[str, Any]]
     ) -> str:
         """Buduje prompt do wygenerowania komentarza motywacyjnego."""
+        logger.info(
+            "🔍 DEBUG: Building motivational prompt",
+            extra={
+                "current_activity": current_activity,
+                "previous_activities_count": len(previous_activities),
+                "previous_activities_raw": previous_activities
+            }
+        )
+        
         # Przygotuj kontekst historii
         if previous_activities:
             recent = previous_activities[-5:]
+            logger.info(
+                "🔍 DEBUG: Processing recent activities",
+                extra={"recent_count": len(recent), "recent_data": recent}
+            )
+            
             history_summary = [
                 f"- {act.get('Rodzaj Aktywności', 'N/A')}: {parse_distance(act.get('Dystans (km)', 0))} km, "
                 f"{act.get('PUNKTY', 0)} pkt (Data: {act.get('Data', 'N/A')})"
@@ -987,7 +993,18 @@ class BotOrchestrator:
             total_distance = sum(distances)
             total_points = sum(int(act.get("PUNKTY", 0)) for act in previous_activities)
             activity_count = len(previous_activities)
+            
+            logger.info(
+                "🔍 DEBUG: History statistics calculated",
+                extra={
+                    "activity_count": activity_count,
+                    "total_distance": total_distance,
+                    "total_points": total_points,
+                    "history_text": history_text
+                }
+            )
         else:
+            logger.info("🔍 DEBUG: No previous activities - first activity for user")
             history_text = "To pierwsza zarejestrowana aktywność!"
             total_distance, total_points, activity_count = 0, 0, 0
 
@@ -1002,7 +1019,7 @@ class BotOrchestrator:
             )
 
         # Wypełnij szablon danymi
-        return prompt_template.format(
+        final_prompt = prompt_template.format(
             activity_type=current_activity.get("typ_aktywnosci", "nieznany"),
             distance=current_activity.get("dystans", 0),
             points=current_activity.get("punkty", 0),
@@ -1011,3 +1028,10 @@ class BotOrchestrator:
             total_points=total_points,
             history_text=history_text,
         )
+        
+        logger.info(
+            "🔍 DEBUG: Final prompt built",
+            extra={"prompt_preview": final_prompt[:300]}
+        )
+        
+        return final_prompt
