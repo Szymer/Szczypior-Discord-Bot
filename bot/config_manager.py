@@ -182,6 +182,16 @@ class ConfigManager:
             }
         return self._activity_keywords
 
+    def is_debug_mode(self) -> bool:
+        """
+        Sprawdza czy bot działa w trybie DEBUG.
+        W trybie DEBUG bot nie zapisuje danych do Google Sheets.
+        
+        Returns:
+            True jeśli DEBUG_MODE=true w zmiennych środowiskowych, False w przeciwnym razie.
+        """
+        return os.getenv("DEBUG_MODE", "false").lower() == "true"
+
 
 # Utworzenie globalnej instancji, aby była łatwo dostępna w całej aplikacji
 config_manager = ConfigManager()

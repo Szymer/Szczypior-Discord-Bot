@@ -326,6 +326,14 @@ class SheetsManager:
         Returns:
             Liczba punktów lub None jeśli błąd
         """
+        # DEBUG MODE: Zwróć fake punkty
+        if os.getenv("DEBUG_MODE", "false").lower() == "true":
+            logger.info(
+                "🔍 DEBUG MODE: Returning fake points",
+                extra={"row": row_number, "fake_points": 42}
+            )
+            return 42
+            
         try:
             # Poczekaj chwilę żeby formuła się przeliczyła
             import time
