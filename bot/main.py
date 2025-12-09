@@ -315,7 +315,7 @@ async def my_history(ctx, limit: int = 5):
         })
     
     embed = create_embed(
-        title=f"📊 Historia aktywności - {ctx.author.display_name}",
+        title=f"📊 Historia aktywności - {get_display_name(ctx.author)}",
         color=discord.Color.blue(),
         fields=fields
     )
