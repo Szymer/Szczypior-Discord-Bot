@@ -267,4 +267,4 @@ def calculate_user_totals(records: List[Dict[str, Any]]) -> Dict[str, Dict[str, 
     Returns:
         Słownik {username: {total_points, total_distance, count}}
     """
-    return aggregate_by_field(records, "User")
+    return aggregate_by_field(records, "Nick")
