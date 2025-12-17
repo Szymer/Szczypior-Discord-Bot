@@ -24,7 +24,6 @@ from .utils import (
     aggregate_by_field,
     calculate_user_totals
 )
-from .exceptions import ConfigurationError, SheetsError, LLMError
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
@@ -107,7 +106,7 @@ async def on_ready():
         
         # Buduj cache IID dla szybkiego sprawdzania duplikatów
         await sheets_manager.build_iid_cache()
-    except Exception as e:
+    except Exception:
         logger.warning("Google Sheets unavailable", exc_info=True)
         logger.info("Bot will work without data persistence")
     
@@ -116,7 +115,7 @@ async def on_ready():
         llm_client = get_llm_client()
         model_info = llm_client.get_model_info()
         logger.info("LLM Client connected", extra={"model": model_info.get('model_name', 'unknown')})
-    except Exception as e:
+    except Exception:
         logger.warning("LLM Client unavailable", exc_info=True)
         logger.info("Bot will work without AI functions")
     
@@ -145,7 +144,7 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         logger.info("Slash commands synchronized", extra={"count": len(synced)})
-    except Exception as e:
+    except Exception:
         logger.error("Failed to sync slash commands", exc_info=True)
 
 
@@ -628,7 +627,7 @@ async def podsumowanie(
                     activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
                     if last_sunday <= activity_date <= last_saturday:
                         filtered_activities.append(a)
-                except (ValueError, KeyError) as e:
+                except (ValueError, KeyError):
                     logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
                     continue
             period_title = f"Ostatni tydzień ({last_sunday.strftime('%d.%m')} - {last_saturday.strftime('%d.%m')})"
@@ -642,7 +641,7 @@ async def podsumowanie(
                     activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
                     if activity_date >= this_sunday:
                         filtered_activities.append(a)
-                except (ValueError, KeyError) as e:
+                except (ValueError, KeyError):
                     logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
                     continue
             period_title = f"Bieżący tydzień (od {this_sunday.strftime('%d.%m')})"
@@ -660,7 +659,7 @@ async def podsumowanie(
                     activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
                     if activity_date.month == last_month and activity_date.year == last_month_year:
                         filtered_activities.append(a)
-                except (ValueError, KeyError) as e:
+                except (ValueError, KeyError):
                     logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
                     continue
             
@@ -727,7 +726,7 @@ async def podsumowanie(
         
     except Exception as e:
         logger.error(f"Błąd generowania podsumowania: {e}", exc_info=True)
-        await interaction.followup.send(f"❌ Wystąpił błąd podczas generowania podsumowania. Spróbuj ponownie.")
+        await interaction.followup.send("❌ Wystąpił błąd podczas generowania podsumowania. Spróbuj ponownie.")
 
 
 @podsumowanie.autocomplete('okres')

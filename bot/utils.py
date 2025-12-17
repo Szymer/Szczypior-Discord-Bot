@@ -1,6 +1,5 @@
 """Moduł pomocniczy zawierający wspólne funkcje wykorzystywane w całym projekcie."""
 
-from functools import wraps
 from typing import Any, Dict, List, Optional, Union
 
 import discord
@@ -21,25 +20,6 @@ def get_display_name(user: Union[discord.User, discord.Member]) -> str:
         return user.display_name
     # Fallback dla User (bez kontekstu serwera)
     return user.global_name if user.global_name else str(user)
-
-
-def format_distance(distance: Union[float, str], decimal_places: int = 1) -> str:
-    """
-    Formatuje dystans do polskiego formatu (z przecinkiem).
-
-    Args:
-        distance: Dystans jako float lub string
-        decimal_places: Liczba miejsc po przecinku
-
-    Returns:
-        Sformatowany string dystansu
-    """
-    try:
-        if isinstance(distance, str):
-            distance = float(distance.replace(",", "."))
-        return f"{distance:.{decimal_places}f}".replace(".", ",")
-    except (ValueError, AttributeError):
-        return "0,0"
 
 
 def parse_distance(distance: Union[float, str, int]) -> float:
@@ -168,53 +148,7 @@ def create_activity_embed(
     return embed
 
 
-def handle_sheets_error(func):
-    """
-    Dekorator do obsługi błędów związanych z Google Sheets.
-
-    Args:
-        func: Funkcja do ozdobienia
-
-    Returns:
-        Ozdobiona funkcja z obsługą błędów
-    """
-
-    @wraps(func)
-    async def wrapper(ctx, *args, **kwargs):
-        try:
-            # Sprawdź czy sheets_manager istnieje w kontekście
-            bot = ctx.bot
-            if not hasattr(bot, "sheets_manager") or bot.sheets_manager is None:
-                await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
-                return None
-            return await func(ctx, *args, **kwargs)
-        except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error in {func.__name__}", exc_info=True)
-            await ctx.send(f"❌ Wystąpił błąd podczas wykonywania komendy: {e}")
-            return None
-
-    return wrapper
-
-
-def format_activity_summary(record: Dict[str, Any]) -> str:
-    """
-    Formatuje pojedynczą aktywność do krótkiego podsumowania.
-
-    Args:
-        record: Słownik z danymi aktywności
-
-    Returns:
-        Sformatowany string z podsumowaniem
-    """
-    activity = record.get("Aktywność", record.get("Rodzaj Aktywności", "N/A"))
-    distance = parse_distance(record.get("Dystans (km)", 0))
-    points = safe_int(record.get("Punkty", record.get("PUNKTY", 0)))
-    date = record.get("Data", "N/A")
-
-    return f"{date}: {activity} {format_distance(distance)}km, {points} pkt"
+    # (previous helpers removed)
 
 
 def aggregate_by_field(

@@ -1,6 +1,5 @@
 """Testy podstawowych funkcji bota."""
 
-import pytest
 
 from bot import __version__
 
@@ -12,12 +11,10 @@ def test_version():
 
 def test_bot_imports():
     """Sprawdza czy główne moduły można zaimportować."""
-    try:
-        from bot import main
+    import importlib.util
 
-        assert True
-    except ImportError:
-        pytest.fail("Nie można zaimportować modułu bot.main")
+    spec = importlib.util.find_spec("bot.main")
+    assert spec is not None, "Nie można zaimportować modułu bot.main"
 
 
 class TestBotCommands:

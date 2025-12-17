@@ -1,6 +1,4 @@
 # bot/llm_clients/__init__.py
-import os
-from typing import Optional, Type
 
 from ..config_manager import config_manager
 from .anthropic_client import AnthropicClient

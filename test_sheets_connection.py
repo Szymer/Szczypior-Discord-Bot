@@ -11,7 +11,7 @@ def test_connection():
     service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT")
     spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
     
-    print(f"\n📋 Sprawdzanie zmiennych środowiskowych:")
+    print("\n📋 Sprawdzanie zmiennych środowiskowych:")
     print(f"   GOOGLE_SERVICE_ACCOUNT: {'✅ Ustawiona' if service_account_json else '❌ Brak'}")
     print(f"   GOOGLE_SHEETS_SPREADSHEET_ID: {spreadsheet_id if spreadsheet_id else '❌ Brak'}")
     
@@ -24,13 +24,13 @@ def test_connection():
         return False
     
     # Parse JSON
-    print(f"\n🔑 Parsowanie Service Account JSON...")
+    print("\n🔑 Parsowanie Service Account JSON...")
     print(f"   Długość: {len(service_account_json)} znaków")
     print(f"   Pierwsze 50 znaków: {service_account_json[:50]}")
     
     try:
         creds_dict = json.loads(service_account_json)
-        print(f"   ✅ JSON poprawny")
+        print("   ✅ JSON poprawny")
         print(f"   Type: {creds_dict.get('type')}")
         print(f"   Project ID: {creds_dict.get('project_id')}")
         print(f"   Client email: {creds_dict.get('client_email')}")
@@ -39,7 +39,7 @@ def test_connection():
         return False
     
     # Try to authenticate
-    print(f"\n🔐 Testowanie autoryzacji Google...")
+    print("\n🔐 Testowanie autoryzacji Google...")
     try:
         from google.oauth2 import service_account
         
@@ -47,7 +47,7 @@ def test_connection():
             creds_dict,
             scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
-        print(f"   ✅ Credentials utworzone poprawnie")
+        print("   ✅ Credentials utworzone poprawnie")
         print(f"   Service account email: {credentials.service_account_email}")
     except Exception as e:
         print(f"   ❌ Błąd tworzenia credentials: {e}")
@@ -56,12 +56,12 @@ def test_connection():
         return False
     
     # Try to connect to Google Sheets
-    print(f"\n📊 Próba połączenia z arkuszem...")
+    print("\n📊 Próba połączenia z arkuszem...")
     try:
         import gspread
         
         gc = gspread.authorize(credentials)
-        print(f"   ✅ Autoryzacja gspread OK")
+        print("   ✅ Autoryzacja gspread OK")
         
         spreadsheet = gc.open_by_key(spreadsheet_id)
         print(f"   ✅ Arkusz otwarty: {spreadsheet.title}")
@@ -98,7 +98,7 @@ def test_connection():
         traceback.print_exc()
         return False
     
-    print(f"\n✅ Test zakończony sukcesem!")
+    print("\n✅ Test zakończony sukcesem!")
     return True
 
 if __name__ == "__main__":

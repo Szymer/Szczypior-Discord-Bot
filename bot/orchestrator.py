@@ -11,9 +11,7 @@ import discord
 from .config_manager import config_manager
 from .constants import ACTIVITY_TYPES
 from .exceptions import (
-    ActivityValidationError,
     ConfigurationError,
-    DuplicateActivityError,
     LLMAnalysisError,
     LLMTimeoutError,
 )
@@ -228,7 +226,7 @@ class BotOrchestrator:
                             model_name="models/gemini-2.0-flash-exp"
                         )
                         logger.info("Retry with better model succeeded", extra={"analysis": analysis_result})
-                    except Exception as e:
+                    except Exception:
                         logger.warning("Better model retry failed, using original result", exc_info=True)
                 
                 # Validate result
@@ -284,14 +282,14 @@ class BotOrchestrator:
                 
                 return result
                 
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             logger.error(
                 "Failed to parse JSON from AI response",
                 exc_info=True,
                 extra={"response_preview": response_clean[:200] if 'response_clean' in locals() else "N/A"}
             )
             return None
-        except Exception as e:
+        except Exception:
             logger.error("Content analysis failed", exc_info=True)
             return None
 
@@ -396,7 +394,7 @@ class BotOrchestrator:
 
             await self._process_successful_analysis(message, analysis)
             
-        except Exception as e:
+        except Exception:
             logger.error(
                 "Message analysis failed",
                 extra={"message_id": message.id},
@@ -542,7 +540,7 @@ class BotOrchestrator:
                         "history_sample": user_history[:2] if user_history else "empty"
                     }
                 )
-            except Exception as e:
+            except Exception:
                 logger.warning(
                     "Failed to fetch user history for motivational comment",
                     exc_info=True,
@@ -573,7 +571,7 @@ class BotOrchestrator:
                 max_tokens=200,
                 system_instruction=system_prompt
             )
-        except (LLMAnalysisError, LLMTimeoutError) as e:
+        except (LLMAnalysisError, LLMTimeoutError):
             logger.error("Failed to generate AI comment", exc_info=True)
             return "Dobra robota!"  # Fallback
 
@@ -640,7 +638,7 @@ class BotOrchestrator:
                 message_id=str(message.id),
                 message_timestamp=str(int(message.created_at.timestamp())),
             )
-        except Exception as e:
+        except Exception:
             logger.error(
                 "Failed to save activity to Sheets", exc_info=True, extra={"user": display_name}
             )
@@ -752,7 +750,7 @@ class BotOrchestrator:
             except discord.errors.NotFound:
                 logger.error("Channel not found", extra={"channel_id": channel_id})
                 return
-            except Exception as e:
+            except Exception:
                 logger.error(
                     "Failed to fetch channel", exc_info=True, extra={"channel_id": channel_id}
                 )
@@ -966,7 +964,7 @@ class BotOrchestrator:
                                 },
                             )
 
-                    except Exception as e:
+                    except Exception:
                         logger.warning(
                             "Error analyzing message during sync",
                             exc_info=True,
@@ -995,7 +993,7 @@ class BotOrchestrator:
             gc.collect()
             logger.debug("Garbage collection completed after sync")
 
-        except Exception as e:
+        except Exception:
             logger.error("Critical sync error", exc_info=True)
 
     def _build_motivational_comment_prompt(

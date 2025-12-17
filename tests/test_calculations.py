@@ -40,7 +40,7 @@ def test_rower_min_distance():
     assert (
         "Minimalny dystans" in error
     ), f"Powinien być błąd minimalnego dystansu, otrzymano: {error}"
-    assert points == 0, f"Punkty powinny być 0 dla dystansu poniżej minimum"
+    assert points == 0, "Punkty powinny być 0 dla dystansu poniżej minimum"
 
 
 def test_rower_valid_distance():
@@ -53,8 +53,8 @@ def test_rower_valid_distance():
 def test_spacer_min_distance():
     """Test minimalnego dystansu dla spaceru."""
     points, error = orchestrator.calculate_points("spacer", 2)
-    assert "Minimalny dystans" in error, f"Powinien być błąd minimalnego dystansu"
-    assert points == 0, f"Punkty powinny być 0 dla dystansu poniżej minimum"
+    assert "Minimalny dystans" in error, "Powinien być błąd minimalnego dystansu"
+    assert points == 0, "Punkty powinny być 0 dla dystansu poniżej minimum"
 
 
 def test_spacer_valid_distance():
@@ -95,7 +95,7 @@ def test_invalid_activity():
     """Test dla nieznanego typu aktywności."""
     points, error = orchestrator.calculate_points("nieznana_aktywnosc", 10)
     assert points == 0, f"Dla nieznanej aktywności oczekiwano 0, otrzymano {points}"
-    assert "Nieznany typ" in error, f"Powinien być błąd o nieznanym typie"
+    assert "Nieznany typ" in error, "Powinien być błąd o nieznanym typie"
 
 
 def test_cardio_basic():

@@ -22,7 +22,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 @bot.event
 async def on_ready():
     print(f'✅ Bot zalogowany jako {bot.user}')
-    print(f'📊 Zbieranie informacji o użytkownikach...\n')
+    print('📊 Zbieranie informacji o użytkownikach...\n')
     
     all_users_info = []
     
@@ -97,7 +97,7 @@ async def on_ready():
         json.dump(all_users_info, f, ensure_ascii=False, indent=2)
     
     print(f"\n💾 Dane zapisane do pliku: {output_file}")
-    print(f"\n📋 STRUKTURA DANYCH:")
+    print("\n📋 STRUKTURA DANYCH:")
     print("""
     - username: Nazwa użytkownika Discord (np. 'jan_kowalski')
     - global_name: Globalna nazwa wyświetlana (np. 'Jan Kowalski')

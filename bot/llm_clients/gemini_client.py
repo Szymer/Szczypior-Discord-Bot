@@ -113,7 +113,7 @@ class GeminiClient(BaseLLMClient):
             print(f"Błąd API Gemini (generate_text): {e}")
             try:
                 print(f"Prompt feedback: {response.prompt_feedback}")
-            except:
+            except Exception:
                 pass
             raise Exception(f"Błąd generowania tekstu: {e}")
 
@@ -203,7 +203,7 @@ class GeminiClient(BaseLLMClient):
             print(f"❌ Błąd API Gemini (analyze_image): {e}")
             try:
                 print(f"Prompt feedback: {response.prompt_feedback}")
-            except:
+            except Exception:
                 pass
             return {"typ_aktywnosci": None, "dystans": None, "komentarz": "Błąd analizy obrazu"}
 

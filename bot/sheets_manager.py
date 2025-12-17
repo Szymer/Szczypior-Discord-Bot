@@ -154,7 +154,7 @@ class SheetsManager:
                 )
                 return None
                 
-        except Exception as e:
+        except Exception:
             logger.error("Failed to get latest activity date", exc_info=True)
             return None
 
@@ -172,7 +172,7 @@ class SheetsManager:
             all_records = await self.get_all_activities_with_timestamps()
             user_records = [r for r in all_records if r.get("Nick") == username]
             return user_records
-        except Exception as e:
+        except Exception:
             logger.error(
                 "Failed to fetch user history", exc_info=True, extra={"username": username}
             )
@@ -402,7 +402,7 @@ class SheetsManager:
                 },
             )
             return (True, last_row)
-        except Exception as e:
+        except Exception:
             logger.error("Failed to add activity", exc_info=True, extra={"username": username})
             return (False, 0)
 
@@ -448,7 +448,7 @@ class SheetsManager:
                     extra={"row": row_number, "cell_value": cell_value}
                 )
                 return None
-        except Exception as e:
+        except Exception:
             logger.error(
                 "Failed to fetch points from sheet",
                 exc_info=True,
@@ -550,10 +550,10 @@ class SheetsManager:
                 # Wykonaj batch_update
                 self.spreadsheet.batch_update({"requests": requests})
                 logger.info("Columns F and G formatted as checkboxes")
-            except Exception as e:
+            except Exception:
                 logger.warning("Failed to format checkbox columns", exc_info=True)
                 
-        except Exception as e:
+        except Exception:
             logger.error("Failed to setup headers", exc_info=True)
 
     async def get_all_activities_with_timestamps(self) -> List[Dict]:
@@ -588,7 +588,7 @@ class SheetsManager:
                     records.append(record)
 
             return records
-        except Exception as e:
+        except Exception:
             logger.error("Failed to fetch activities", exc_info=True)
             return []
 
@@ -609,7 +609,7 @@ class SheetsManager:
                     self.iid_cache.add(iid)
 
             logger.info("IID cache built", extra={"entries": len(self.iid_cache)})
-        except Exception as e:
+        except Exception:
             logger.error("Failed to build IID cache", exc_info=True)
             self.iid_cache.clear()  # Wyczyść cache w razie błędu
 
@@ -630,6 +630,6 @@ class SheetsManager:
 
             # Sprawdź w cache (O(1))
             return iid_to_check in self.iid_cache
-        except Exception as e:
+        except Exception:
             logger.error("Failed to check for duplicate", exc_info=True)
             return False
