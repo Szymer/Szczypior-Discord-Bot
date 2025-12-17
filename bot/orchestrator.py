@@ -784,7 +784,8 @@ class BotOrchestrator:
             # ID wiadomości do debugowania
             DEBUG_MESSAGE_ID = 1445524947186356255
 
-            async for message in channel.history(limit=500):
+            # Ograniczony limit dla oszczędności pamięci (zmniejszone z 500 na 100)
+            async for message in channel.history(limit=100):
                 # Sprawdź datę wiadomości - pomiń starsze niż 1 grudnia 2025
                 if message.created_at < min_sync_date:
                     logger.debug(
@@ -842,13 +843,19 @@ class BotOrchestrator:
                 },
             )
 
-            # KROK 3: Przetwarzaj tylko unikalne wiadomości
+            # KROK 3: Przetwarzaj tylko unikalne wiadomości w batch'ach
             processed, added, not_recognized = 0, 0, 0
 
             # Odwróć kolejność aby przetwarzać od najstarszej do najnowszej
             messages_to_process.reverse()
 
-            for message in messages_to_process:
+            # Przetwarzaj w małych batch'ach dla oszczędności pamięci
+            BATCH_SIZE = 20
+            for batch_start in range(0, len(messages_to_process), BATCH_SIZE):
+                batch = messages_to_process[batch_start:batch_start + BATCH_SIZE]
+                logger.info(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(messages_to_process)-1)//BATCH_SIZE + 1}")
+
+                for message in batch:
                 processed += 1
                 try:
                     # Get image URL if present
@@ -947,6 +954,9 @@ class BotOrchestrator:
                         extra={"message_id": message.id},
                     )
 
+                # Wyczyść batch z pamięci po przetworzeniu
+                batch.clear()
+
             logger.info(
                 "Sync completed",
                 extra={
@@ -956,6 +966,15 @@ class BotOrchestrator:
                     "not_recognized": not_recognized,
                 },
             )
+            
+            # Wyczyść listy wiadomości z pamięci
+            all_messages.clear()
+            messages_to_process.clear()
+            
+            # Wymuś garbage collection po dużej operacji
+            import gc
+            gc.collect()
+            logger.debug("Garbage collection completed after sync")
 
         except Exception as e:
             logger.error("Critical sync error", exc_info=True)

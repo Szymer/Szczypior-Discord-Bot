@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from collections import OrderedDict
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -14,6 +15,36 @@ from .utils import parse_distance
 logger = logging.getLogger(__name__)
 
 
+class LRUCache:
+    """Simple LRU cache z limitem rozmiaru."""
+    
+    def __init__(self, maxsize: int = 5000):
+        self.cache = OrderedDict()
+        self.maxsize = maxsize
+    
+    def add(self, key: str):
+        """Dodaje klucz do cache."""
+        if key in self.cache:
+            # Przenieś na koniec (najnowszy)
+            self.cache.move_to_end(key)
+        else:
+            self.cache[key] = True
+            # Jeśli przekroczono limit, usuń najstarszy
+            if len(self.cache) > self.maxsize:
+                self.cache.popitem(last=False)
+    
+    def __contains__(self, key: str) -> bool:
+        """Sprawdza czy klucz jest w cache."""
+        return key in self.cache
+    
+    def clear(self):
+        """Czyści cache."""
+        self.cache.clear()
+    
+    def __len__(self) -> int:
+        return len(self.cache)
+
+
 class SheetsManager:
     """Zarządza zapisem i odczytem danych z Google Sheets."""
 
@@ -22,7 +53,7 @@ class SheetsManager:
         self.client = None
         self.spreadsheet = None
         self.worksheet = None
-        self.iid_cache = set()  # Cache dla szybkiego sprawdzania duplikatów
+        self.iid_cache = LRUCache(maxsize=5000)  # LRU cache z limitem dla duplikatów
         self._authorize()
 
     def _authorize(self):
@@ -503,14 +534,15 @@ class SheetsManager:
     def build_iid_cache(self):
         """
         Buduje cache wszystkich IID z arkusza dla szybkiego sprawdzania duplikatów.
-        Wywołaj na starcie bota.
+        Wywołaj na starcie bota. Używa LRU cache z limitem.
         """
         try:
             logger.info("Building IID cache from spreadsheet")
             activities = self.get_all_activities_with_timestamps()
 
             self.iid_cache.clear()
-            for activity in activities:
+            # Dodaj tylko najnowsze aktywności (sortowane od najnowszych)
+            for activity in activities[-5000:]:
                 iid = activity.get("IID", "")
                 if iid:
                     self.iid_cache.add(iid)
@@ -518,7 +550,7 @@ class SheetsManager:
             logger.info("IID cache built", extra={"entries": len(self.iid_cache)})
         except Exception as e:
             logger.error("Failed to build IID cache", exc_info=True)
-            self.iid_cache = set()  # Pusty set w razie błędu
+            self.iid_cache.clear()  # Wyczyść cache w razie błędu
 
     def activity_exists(self, message_id: str, message_timestamp: str) -> bool:
         """
