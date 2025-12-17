@@ -1,5 +1,6 @@
 """Moduł do obsługi Google Sheets."""
 
+import asyncio
 import json
 import logging
 import os
@@ -112,7 +113,52 @@ class SheetsManager:
             logger.error("Google Sheets authorization failed", exc_info=True)
             raise
 
-    def get_user_history(self, username: str) -> List[Dict]:
+    async def get_latest_activity_date(self) -> Optional[datetime]:
+        """
+        Pobiera datę najmłodszego (najnowszego) wpisu w arkuszu.
+        
+        Returns:
+            Obiekt datetime z datą ostatniego wpisu lub None jeśli arkusz jest pusty
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            all_values = await loop.run_in_executor(None, self.worksheet.get_all_values)
+            
+            if len(all_values) < 2:
+                logger.info("No activities in sheet yet")
+                return None
+            
+            # Znajdź ostatni niepusty wiersz z datą w kolumnie A
+            latest_date_str = None
+            for row in reversed(all_values[1:]):  # Pomiń nagłówek, idź od końca
+                if len(row) > 0 and row[0]:  # Kolumna A (Data)
+                    latest_date_str = row[0]
+                    break
+            
+            if not latest_date_str:
+                logger.info("No date found in sheet")
+                return None
+            
+            # Parsuj datę (format: "YYYY-MM-DD HH:MM:SS")
+            try:
+                latest_date = datetime.strptime(latest_date_str, "%Y-%m-%d %H:%M:%S")
+                logger.info(
+                    "Latest activity date from sheet",
+                    extra={"date": latest_date_str}
+                )
+                return latest_date
+            except ValueError as e:
+                logger.warning(
+                    "Failed to parse latest date from sheet",
+                    extra={"date_str": latest_date_str, "error": str(e)}
+                )
+                return None
+                
+        except Exception as e:
+            logger.error("Failed to get latest activity date", exc_info=True)
+            return None
+
+    async def get_user_history(self, username: str) -> List[Dict]:
         """
         Pobiera historię aktywności użytkownika.
 
@@ -123,7 +169,7 @@ class SheetsManager:
             Lista słowników z historią aktywności
         """
         try:
-            all_records = self.get_all_activities_with_timestamps()
+            all_records = await self.get_all_activities_with_timestamps()
             user_records = [r for r in all_records if r.get("Nick") == username]
             return user_records
         except Exception as e:
@@ -189,7 +235,7 @@ class SheetsManager:
         # Domyślnie zwróć oryginalną wartość
         return activity_type
 
-    def add_activity(
+    async def add_activity(
         self,
         username: str,
         activity_type: str,
@@ -263,7 +309,8 @@ class SheetsManager:
             ]
 
             # Znajdź pierwszy pusty wiersz w kolumnach A:H
-            all_values = self.worksheet.get_all_values()
+            loop = asyncio.get_event_loop()
+            all_values = await loop.run_in_executor(None, self.worksheet.get_all_values)
 
             # Sprawdź czy ostatni wiersz w kolumnach A:H jest pusty
             last_row_data = all_values[-1][:8] if all_values else []
@@ -271,7 +318,7 @@ class SheetsManager:
 
             if has_data_in_last_row:
                 # Ostatni wiersz ma dane - najpierw dodaj nowy wiersz
-                self.worksheet.add_rows(1)
+                await loop.run_in_executor(None, self.worksheet.add_rows, 1)
                 next_row = len(all_values) + 1
             else:
                 # Ostatni wiersz jest pusty - użyj go
@@ -280,10 +327,16 @@ class SheetsManager:
             # Dodaj dane do zakresu A:I w następnym wierszu (bez kolumny H - formuła)
             # Musimy podzielić na dwa zakresy: A:G (z IID wykluczonym) i I (IID)
             cell_range_ag = f"A{next_row}:G{next_row}"
-            self.worksheet.update(cell_range_ag, [row[:7]], value_input_option="USER_ENTERED")
+            await loop.run_in_executor(
+                None, 
+                lambda: self.worksheet.update(cell_range_ag, [row[:7]], value_input_option="USER_ENTERED")
+            )
             # Dodaj IID do kolumny I
             if iid:
-                self.worksheet.update(f"I{next_row}", [[iid]], value_input_option="USER_ENTERED")
+                await loop.run_in_executor(
+                    None,
+                    lambda: self.worksheet.update(f"I{next_row}", [[iid]], value_input_option="USER_ENTERED")
+                )
 
             # Dodaj formułę do kolumny H (PUNKTY) w nowo dodanym wierszu
             last_row = next_row
@@ -322,11 +375,17 @@ class SheetsManager:
 
   Wynik
 ))"""
-            self.worksheet.update_acell(f"H{last_row}", formula)
+            await loop.run_in_executor(
+                None,
+                lambda: self.worksheet.update_acell(f"H{last_row}", formula)
+            )
 
             # Ustaw format komórki H jako NUMBER (żeby nie interpretowało wyniku jako datę)
-            self.worksheet.format(
-                f"H{last_row}", {"numberFormat": {"type": "NUMBER", "pattern": "0"}}
+            await loop.run_in_executor(
+                None,
+                lambda: self.worksheet.format(
+                    f"H{last_row}", {"numberFormat": {"type": "NUMBER", "pattern": "0"}}
+                )
             )
 
             # Dodaj IID do cache
@@ -347,7 +406,7 @@ class SheetsManager:
             logger.error("Failed to add activity", exc_info=True, extra={"username": username})
             return (False, 0)
 
-    def get_points_from_row(self, row_number: int) -> Optional[int]:
+    async def get_points_from_row(self, row_number: int) -> Optional[int]:
         """
         Pobiera punkty z konkretnego wiersza arkusza (kolumna H).
         
@@ -367,11 +426,12 @@ class SheetsManager:
             
         try:
             # Poczekaj chwilę żeby formuła się przeliczyła
-            import time
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
             
             # Pobierz wartość z kolumny H (PUNKTY)
-            cell_value = self.worksheet.acell(f"H{row_number}").value
+            loop = asyncio.get_event_loop()
+            cell = await loop.run_in_executor(None, lambda: self.worksheet.acell(f"H{row_number}"))
+            cell_value = cell.value
             
             if cell_value and cell_value.strip():
                 # Usuń spacje i przecinki, zamień na int
@@ -496,16 +556,17 @@ class SheetsManager:
         except Exception as e:
             logger.error("Failed to setup headers", exc_info=True)
 
-    def get_all_activities_with_timestamps(self) -> List[Dict]:
+    async def get_all_activities_with_timestamps(self) -> List[Dict]:
         """
         Pobiera wszystkie aktywności z arkusza wraz z datami i nickami.
         Używa get_all_values() aby uniknąć błędnej konwersji liczb przez gspread.
 
         Returns:
-            Lista słowników z aktywnościami
+            Lista słowników z aktywnosciami
         """
         try:
-            all_values = self.worksheet.get_all_values()
+            loop = asyncio.get_event_loop()
+            all_values = await loop.run_in_executor(None, self.worksheet.get_all_values)
             if len(all_values) < 2:
                 return []
 
@@ -531,14 +592,14 @@ class SheetsManager:
             logger.error("Failed to fetch activities", exc_info=True)
             return []
 
-    def build_iid_cache(self):
+    async def build_iid_cache(self):
         """
         Buduje cache wszystkich IID z arkusza dla szybkiego sprawdzania duplikatów.
         Wywołaj na starcie bota. Używa LRU cache z limitem.
         """
         try:
             logger.info("Building IID cache from spreadsheet")
-            activities = self.get_all_activities_with_timestamps()
+            activities = await self.get_all_activities_with_timestamps()
 
             self.iid_cache.clear()
             # Dodaj tylko najnowsze aktywności (sortowane od najnowszych)

@@ -95,7 +95,7 @@ async def on_ready():
         logger.info("Google Sheets connected and ready")
         
         # Buduj cache IID dla szybkiego sprawdzania duplikatów
-        sheets_manager.build_iid_cache()
+        await sheets_manager.build_iid_cache()
     except Exception as e:
         logger.warning("Google Sheets unavailable", exc_info=True)
         logger.info("Bot will work without data persistence")
@@ -240,7 +240,7 @@ async def add_activity(ctx, activity_type: str, distance: float,
             # Stwórz timestamp jako int (zgodnie z formatem IID)
             timestamp_int = int(ctx.message.created_at.timestamp())
             
-            saved, row_number = sheets_manager.add_activity(
+            saved, row_number = await sheets_manager.add_activity(
                 username=username,
                 activity_type=activity_type,
                 distance=distance,
@@ -253,7 +253,7 @@ async def add_activity(ctx, activity_type: str, distance: float,
             
             # Jeśli zapisano, pobierz punkty z arkusza
             if saved and row_number > 0:
-                sheet_points = sheets_manager.get_points_from_row(row_number)
+                sheet_points = await sheets_manager.get_points_from_row(row_number)
                 if sheet_points is not None:
                     actual_points = sheet_points
         except Exception as e:
@@ -291,7 +291,7 @@ async def my_history(ctx, limit: int = 5):
         return
     
     username = get_display_name(ctx.author)
-    history = sheets_manager.get_user_history(username)
+    history = await sheets_manager.get_user_history(username)
     
     if not history:
         await ctx.send(f"{ctx.author.mention}, nie masz jeszcze żadnych zapisanych aktywności! Użyj `!dodaj_aktywnosc`")
@@ -332,7 +332,7 @@ async def my_points(ctx):
     
     username = get_display_name(ctx.author)
     total_points = sheets_manager.get_user_total_points(username)
-    history = sheets_manager.get_user_history(username)
+    history = await sheets_manager.get_user_history(username)
     
     embed = create_embed(
         title="🏆 Twoje punkty",
@@ -579,7 +579,7 @@ async def podsumowanie(
     
     try:
         # Pobierz wszystkie aktywności
-        all_activities = sheets_manager.get_all_activities_with_timestamps()
+        all_activities = await sheets_manager.get_all_activities_with_timestamps()
         
         if not all_activities:
             await interaction.followup.send("📊 Brak danych do podsumowania.")

@@ -377,7 +377,7 @@ class BotOrchestrator:
             user_history = []
             if self.sheets_manager:
                 display_name = get_display_name(message.author)
-                user_history = self.sheets_manager.get_user_history(display_name)
+                user_history = await self.sheets_manager.get_user_history(display_name)
             
             # Get image URL if present
             image_url = self._get_image_url(message) if has_image else None
@@ -469,7 +469,7 @@ class BotOrchestrator:
         await message.remove_reaction("🤔", self.bot.user)
 
         # Zapis do arkusza - arkusz obliczy punkty
-        saved, row_number = self._save_activity_to_sheets(message, analysis)
+        saved, row_number = await self._save_activity_to_sheets(message, analysis)
         
         if not saved or row_number == 0:
             logger.error("Failed to save activity", extra={"discord_msg_id": message.id})
@@ -483,7 +483,7 @@ class BotOrchestrator:
             return
         
         # Pobierz punkty z arkusza (obliczone przez formułę)
-        points = self.sheets_manager.get_points_from_row(row_number)
+        points = await self.sheets_manager.get_points_from_row(row_number)
         
         if points is None or points == 0:
             logger.warning(
@@ -505,7 +505,7 @@ class BotOrchestrator:
         )
 
         # Generowanie komentarza (z punktami z arkusza)
-        ai_comment = self._generate_motivational_comment(
+        ai_comment = await self._generate_motivational_comment(
             message.author, activity_type, distance, points
         )
 
@@ -514,7 +514,7 @@ class BotOrchestrator:
         await message.reply(embed=embed)
         await message.add_reaction("✅")
 
-    def _generate_motivational_comment(
+    async def _generate_motivational_comment(
         self, author: discord.User, activity_type: str, distance: float, points: int
     ) -> str:
         """Pobiera historię, buduje prompt i generuje komentarz motywacyjny."""
@@ -533,7 +533,7 @@ class BotOrchestrator:
         
         if self.sheets_manager:
             try:
-                user_history = self.sheets_manager.get_user_history(display_name)
+                user_history = await self.sheets_manager.get_user_history(display_name)
                 logger.info(
                     "🔍 DEBUG: User history fetched",
                     extra={
@@ -577,7 +577,7 @@ class BotOrchestrator:
             logger.error("Failed to generate AI comment", exc_info=True)
             return "Dobra robota!"  # Fallback
 
-    def _save_activity_to_sheets(
+    async def _save_activity_to_sheets(
         self, message: discord.Message, analysis: Dict[str, Any]
     ) -> tuple[bool, int]:
         """
@@ -630,7 +630,7 @@ class BotOrchestrator:
                 }
             )
 
-            return self.sheets_manager.add_activity(
+            return await self.sheets_manager.add_activity(
                 username=display_name,
                 activity_type=analysis["typ_aktywnosci"],
                 distance=float(analysis["dystans"]),
@@ -773,26 +773,45 @@ class BotOrchestrator:
 
             logger.info("Starting chat history sync", extra={"channel": channel.name})
 
-            # KROK 1: Zbierz wszystkie wiadomości z kanału
+            # KROK 1: Pobierz datę ostatniego wpisu z Google Sheets
+            from datetime import datetime, timezone, timedelta
+            
+            latest_sheet_date = await self.sheets_manager.get_latest_activity_date()
+            
+            if latest_sheet_date:
+                # Dodaj timezone UTC do daty z arkusza (jeśli nie ma)
+                if latest_sheet_date.tzinfo is None:
+                    latest_sheet_date = latest_sheet_date.replace(tzinfo=timezone.utc)
+                
+                # Odejmij 1 godzinę aby złapać ewentualne wiadomości z tego samego czasu
+                min_sync_date = latest_sheet_date - timedelta(hours=1)
+                
+                logger.info(
+                    "Syncing messages newer than latest sheet entry",
+                    extra={
+                        "latest_sheet_date": latest_sheet_date.isoformat(),
+                        "sync_from_date": min_sync_date.isoformat()
+                    }
+                )
+            else:
+                # Jeśli arkusz jest pusty, użyj domyślnej daty (1 grudnia 2025)
+                min_sync_date = datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc)
+                logger.info(
+                    "Sheet is empty, syncing from default date",
+                    extra={"sync_from_date": min_sync_date.isoformat()}
+                )
+
+            # KROK 2: Zbierz wszystkie wiadomości z kanału nowsze niż min_sync_date
             all_messages = []
             logger.info("Fetching messages from channel")
-
-            # Minimalna data wiadomości do synchronizacji (1 grudnia 2025)
-            from datetime import datetime, timezone
-            min_sync_date = datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc)
 
             # ID wiadomości do debugowania
             DEBUG_MESSAGE_ID = 1445524947186356255
 
-            # Ograniczony limit dla oszczędności pamięci (zmniejszone z 500 na 100)
-            async for message in channel.history(limit=100):
-                # Sprawdź datę wiadomości - pomiń starsze niż 1 grudnia 2025
-                if message.created_at < min_sync_date:
-                    logger.debug(
-                        "Skipping message older than Dec 1, 2025",
-                        extra={"message_id": message.id, "created_at": message.created_at}
-                    )
-                    continue
+            # Użyj parametru after aby pobrać tylko wiadomości nowsze niż min_sync_date
+            # Limit zwiększony do 500 bo teraz pobieramy tylko nowe wiadomości
+            async for message in channel.history(limit=500, after=min_sync_date):
+                # Nie musimy już sprawdzać daty - Discord już filtruje za nas
 
                 # DEBUG: Sprawdź konkretną wiadomość
                 if message.id == DEBUG_MESSAGE_ID:
@@ -856,103 +875,103 @@ class BotOrchestrator:
                 logger.info(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(messages_to_process)-1)//BATCH_SIZE + 1}")
 
                 for message in batch:
-                processed += 1
-                try:
-                    # Get image URL if present
-                    image_url = self._get_image_url(message)
-                    
-                    # Use unified analysis method (no history for sync to save tokens)
-                    analysis = await self.analyze_content(
-                        text=message.content,
-                        image_url=image_url,
-                        user_history=None  # Skip history during sync to save tokens
-                    )
+                    processed += 1
+                    try:
+                        # Get image URL if present
+                        image_url = self._get_image_url(message)
+                        
+                        # Use unified analysis method (no history for sync to save tokens)
+                        analysis = await self.analyze_content(
+                            text=message.content,
+                            image_url=image_url,
+                            user_history=None  # Skip history during sync to save tokens
+                        )
 
-                    if not analysis:
-                        not_recognized += 1
-                        logger.debug(
-                            "AI did not return analysis for sync message",
+                        if not analysis:
+                            not_recognized += 1
+                            logger.debug(
+                                "AI did not return analysis for sync message",
+                                extra={"message_id": message.id},
+                            )
+                            continue
+
+                        # Sprawdź czy mamy podstawowe dane lub zastosuj fallback
+                        has_basic_data = (
+                            analysis and analysis.get("typ_aktywnosci") and analysis.get("dystans")
+                        )
+
+                        # Fallback dla aktywności bez dystansu (jak w handle_message)
+                        if not has_basic_data and analysis and analysis.get("komentarz"):
+                            comment = analysis.get("komentarz", "")
+                            sport_keywords = [
+                                "aktywność",
+                                "trening",
+                                "sport",
+                                "czas trwania",
+                                "tętno",
+                                "bpm",
+                                "soccer",
+                                "football",
+                                "cardio",
+                                "fitness",
+                                "gym",
+                                "workout",
+                            ]
+
+                            if any(keyword.lower() in comment.lower() for keyword in sport_keywords):
+                                time_minutes = self._extract_time_from_comment(comment)
+
+                                if time_minutes and time_minutes > 5:
+                                    distance = self._convert_time_to_cardio_distance(time_minutes)
+                                    logger.debug(
+                                        "Fallback sync: converted time to distance",
+                                        extra={"time_minutes": time_minutes, "distance_km": distance},
+                                    )
+
+                                    analysis["typ_aktywnosci"] = "cardio"
+                                    analysis["dystans"] = distance
+                                    analysis["czas"] = f"{int(time_minutes)} min"
+                                    has_basic_data = True
+
+                        if has_basic_data:
+                            # Zapisz aktywność (IID automatycznie dodane do cache w add_activity)
+                            # Arkusz obliczy punkty
+                            saved, row_number = await self._save_activity_to_sheets(message, analysis)
+                            
+                            if saved and row_number > 0:
+                                # Pobierz punkty z arkusza
+                                points = await self.sheets_manager.get_points_from_row(row_number)
+                                if points and points > 0:
+                                    added += 1
+                                    logger.info(
+                                        "Activity added from sync",
+                                        extra={
+                                            "discord_msg_id": message.id,
+                                            "activity_type": analysis["typ_aktywnosci"],
+                                            "distance": analysis["dystans"],
+                                            "weight": analysis.get("obciazenie"),
+                                            "elevation": analysis.get("przewyzszenie"),
+                                            "points": points,
+                                            "row": row_number
+                                        },
+                                    )
+                        else:
+                            # Nie rozpoznano aktywności
+                            not_recognized += 1
+                            logger.debug(
+                                "Activity not recognized in sync message",
+                                extra={
+                                    "message_id": message.id,
+                                    "comment": analysis.get("komentarz", "No data"),
+                                },
+                            )
+
+                    except Exception as e:
+                        logger.warning(
+                            "Error analyzing message during sync",
+                            exc_info=True,
                             extra={"message_id": message.id},
                         )
-                        continue
-
-                    # Sprawdź czy mamy podstawowe dane lub zastosuj fallback
-                    has_basic_data = (
-                        analysis and analysis.get("typ_aktywnosci") and analysis.get("dystans")
-                    )
-
-                    # Fallback dla aktywności bez dystansu (jak w handle_message)
-                    if not has_basic_data and analysis and analysis.get("komentarz"):
-                        comment = analysis.get("komentarz", "")
-                        sport_keywords = [
-                            "aktywność",
-                            "trening",
-                            "sport",
-                            "czas trwania",
-                            "tętno",
-                            "bpm",
-                            "soccer",
-                            "football",
-                            "cardio",
-                            "fitness",
-                            "gym",
-                            "workout",
-                        ]
-
-                        if any(keyword.lower() in comment.lower() for keyword in sport_keywords):
-                            time_minutes = self._extract_time_from_comment(comment)
-
-                            if time_minutes and time_minutes > 5:
-                                distance = self._convert_time_to_cardio_distance(time_minutes)
-                                logger.debug(
-                                    "Fallback sync: converted time to distance",
-                                    extra={"time_minutes": time_minutes, "distance_km": distance},
-                                )
-
-                                analysis["typ_aktywnosci"] = "cardio"
-                                analysis["dystans"] = distance
-                                analysis["czas"] = f"{int(time_minutes)} min"
-                                has_basic_data = True
-
-                    if has_basic_data:
-                        # Zapisz aktywność (IID automatycznie dodane do cache w add_activity)
-                        # Arkusz obliczy punkty
-                        saved, row_number = self._save_activity_to_sheets(message, analysis)
-                        
-                        if saved and row_number > 0:
-                            # Pobierz punkty z arkusza
-                            points = self.sheets_manager.get_points_from_row(row_number)
-                            if points and points > 0:
-                                added += 1
-                                logger.info(
-                                    "Activity added from sync",
-                                    extra={
-                                        "discord_msg_id": message.id,
-                                        "activity_type": analysis["typ_aktywnosci"],
-                                        "distance": analysis["dystans"],
-                                        "weight": analysis.get("obciazenie"),
-                                        "elevation": analysis.get("przewyzszenie"),
-                                        "points": points,
-                                        "row": row_number
-                                    },
-                                )
-                    else:
-                        # Nie rozpoznano aktywności
-                        not_recognized += 1
-                        logger.debug(
-                            "Activity not recognized in sync message",
-                            extra={
-                                "message_id": message.id,
-                                "comment": analysis.get("komentarz", "No data"),
-                            },
-                        )
-
-                except Exception as e:
-                    logger.warning(
-                        "Error analyzing message during sync",
-                        exc_info=True,
-                        extra={"message_id": message.id},
-                    )
 
                 # Wyczyść batch z pamięci po przetworzeniu
                 batch.clear()
