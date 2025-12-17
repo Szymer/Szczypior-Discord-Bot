@@ -88,6 +88,17 @@ async def on_ready():
     global sheets_manager, llm_client, orchestrator
     logger.info(f"{bot.user} is online", extra={"bot_id": bot.user.id})
     
+    # Monitor pamięci - START
+    try:
+        import psutil
+        import os as os_module
+        process = psutil.Process(os_module.getpid())
+        mem_start = process.memory_info()
+        logger.info(f"🔍 MEMORY START: RSS={mem_start.rss/1024/1024:.2f} MB, VMS={mem_start.vms/1024/1024:.2f} MB")
+    except ImportError:
+        logger.warning("psutil not installed - memory monitoring disabled")
+        process = None
+    
     # Inicjalizacja Google Sheets (opcjonalne - tylko jeśli skonfigurowane)
     try:
         sheets_manager = SheetsManager()
@@ -112,10 +123,23 @@ async def on_ready():
     # Inicjalizacja orkiestratora
     orchestrator = BotOrchestrator(bot, llm_client, sheets_manager)
     
+    # Monitor pamięci - PO INICJALIZACJI
+    if process:
+        mem_after_init = process.memory_info()
+        logger.info(f"🔍 MEMORY AFTER INIT: RSS={mem_after_init.rss/1024/1024:.2f} MB (Δ {(mem_after_init.rss-mem_start.rss)/1024/1024:.2f} MB)")
+    
     # Synchronizacja historii czatu z Google Sheets
     if sheets_manager and llm_client:
         logger.info("Starting chat history sync")
         await orchestrator.sync_chat_history()
+        
+        # Monitor pamięci - PO SYNCHRONIZACJI (KLUCZOWY POMIAR!)
+        if process:
+            import gc
+            gc.collect()  # Wymuś garbage collection
+            mem_after_sync = process.memory_info()
+            logger.info(f"🔍 MEMORY AFTER SYNC: RSS={mem_after_sync.rss/1024/1024:.2f} MB (Δ {(mem_after_sync.rss-mem_after_init.rss)/1024/1024:.2f} MB)")
+            logger.info(f"🎯 TOTAL MEMORY USED: {mem_after_sync.rss/1024/1024:.2f} MB (from start: +{(mem_after_sync.rss-mem_start.rss)/1024/1024:.2f} MB)")
     
     # Synchronizacja komend slash z Discord
     try:
