@@ -7,6 +7,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import RankingPage from "@/pages/RankingPage";
 import StatsPage from "@/pages/StatsPage";
 import HistoryPage from "@/pages/HistoryPage";
+import RulesPage from "@/pages/RulesPage";
 import AppLayout from "@/components/AppLayout";
 import NotFound from "@/pages/NotFound";
 
