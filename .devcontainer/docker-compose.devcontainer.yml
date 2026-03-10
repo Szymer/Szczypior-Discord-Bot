@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  bot:
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/Szczypior-Discord-Bot:cached
+
+  db-service:
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/Szczypior-Discord-Bot:cached

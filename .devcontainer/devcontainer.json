@@ -1,16 +1,31 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
 {
-	"name": "Szczypior - Bot - development",
-	"build": {
-		// Sets the run context to one level up instead of the .devcontainer folder.
-		"context": "..",
-		// Update the 'dockerFile' property if you aren't using the standard 'Dockerfile' filename.
-		"dockerfile": "../services/discord-bot/Dockerfile"
-	},
-	"features": {
-		"ghcr.io/devcontainers/features/python:1": {}
-	},
+	"name": "Szczypior - Compose development",
+	"dockerComposeFile": [
+		"../docker-compose.yml",
+		"docker-compose.devcontainer.yml"
+	],
+	"service": "bot",
+	"runServices": [
+		"bot",
+		"db-service"
+	],
+	"shutdownAction": "stopCompose",
+	"workspaceFolder": "/workspaces/Szczypior-Discord-Bot",
+	"postCreateCommand": "sh .devcontainer/postCreate.sh",
+	"forwardPorts": [
+		8080
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-azuretools.vscode-docker"
+			]
+		}
+	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},

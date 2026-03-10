@@ -16,3 +16,6 @@ Pillow>=10.1.0
 
 # Parsowanie i walidacja danych
 pydantic>=2.5.0
+
+# PostgreSQL Database (Supabase)
+asyncpg>=0.29.0
