@@ -1,12 +1,13 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { BarChart3, Home, LogOut, Medal, ScrollText, Shield } from "lucide-react";
+import { BarChart3, Home, LogOut, Medal, ScrollText, Shield, BookOpen } from "lucide-react";
 
 const navItems = [
   { to: "/dashboard", label: "PANEL", icon: Home },
   { to: "/ranking", label: "RANKING", icon: Medal },
   { to: "/stats", label: "STATYSTYKI", icon: BarChart3 },
   { to: "/history", label: "HISTORIA", icon: ScrollText },
+  { to: "/rules", label: "ZASADY", icon: BookOpen },
 ];
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
