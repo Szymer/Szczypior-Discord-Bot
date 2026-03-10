@@ -38,13 +38,3 @@ class ActivityRead(BaseModel):
 
 class UserRankingRead(BaseModel):
     id: int
-    discord_id: str
-    display_name: str
-    total_activities: int
-    total_distance_km: float
-    total_points: int
-    base_points: int
-    weight_bonus_points: int
-    elevation_bonus_points: int
-    mission_bonus_points: int
-    last_activity_at: datetime | None

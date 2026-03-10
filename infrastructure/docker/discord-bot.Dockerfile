@@ -1,24 +1,25 @@
 # Użyj oficjalnego, lekkiego image'u Pythona
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Ustaw katalog roboczy wewnątrz kontenera
 WORKDIR /app
 
-# Skopiuj plik zależności
-COPY requirements.txt .
+# Zmienne środowiskowe dla czystszego logowania
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Zainstaluj zależności
-RUN pip install --no-cache-dir -r requirements.txt
+# Ścieżki WZGLĘDNE do kontekstu (infrastructure/docker/)
+COPY services/discord-bot/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Skopiuj resztę plików aplikacji
-COPY . .
+# Skopiuj kod bota (z services/discord-bot/)
+COPY services/discord-bot /app
 
-# Skopiuj skrypt startowy i napraw końce linii (LF zamiast CRLF)
+# Skopiuj skrypt startowy (jeśli jest w infrastructure/docker/)
 COPY start.sh /app/start.sh
 RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
-# Fly.io secrets będą używane dla wrażliwych danych
-# authorized_user.json będzie tworzony przy starcie z GOOGLE_CREDENTIALS
+EXPOSE 8080
 
-# Polecenie do uruchomienia bota po starcie kontenera
-CMD ["/app/start.sh"]
+# Uruchom bota bezpośrednio (lub start.sh)
+CMD ["python", "bot/main.py"]

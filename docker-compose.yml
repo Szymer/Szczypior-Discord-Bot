@@ -1,16 +1,57 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  bot:
-    build: ./services/discord-bot
-    container_name: szczypior-discord-bot
-    env_file:
-      - .env
-    restart: unless-stopped
+  db-service:
+    build: ../../services/db-service
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      FRONTEND_URL: http://localhost:3000
     volumes:
-      - ./bot.log:/app/bot.log
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - ../../services/db-service/app:/code/app:ro
+    command: uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
+    networks:
+      - szczypior-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  discord-bot:
+    build: ../../services/discord-bot
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      API_URL: http://db-service:80
+    depends_on:
+      db-service:
+        condition: service_healthy
+    networks:
+      - szczypior-network
+    restart: unless-stopped
+
+  frontend:
+    build: ../../services/frontend
+    ports:
+      - "3000:8001"
+    environment:
+      API_URL: http://db-service:80
+      SECRET_KEY: ${SECRET_KEY}
+    volumes:
+      - ../../services/frontend:/app
+    depends_on:
+      db-service:
+        condition: service_healthy
+    networks:
+      - szczypior-network
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8001"
+    restart: unless-stopped
+
+networks:
+  szczypior-network:
+    driver: bridge
