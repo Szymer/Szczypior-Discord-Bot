@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   bot:
-    build: .
+    build: ./services/discord-bot
     container_name: szczypior-discord-bot
     env_file:
       - .env

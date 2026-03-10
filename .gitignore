@@ -159,3 +159,6 @@ cython_debug/
 # Logs
 logs/
 *.log
+
+# Static analysis artifacts
+vulture_findings.json

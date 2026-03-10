@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["../../tests/discord-bot"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -64,7 +64,7 @@ build-backend = "setuptools.build_meta"
 name = "szczypior-discord-bot"
 version = "0.1.0"
 description = "Szczypior Discord Bot - bot dla serwera Discord"
-readme = "README.md"
+readme = "../../README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
