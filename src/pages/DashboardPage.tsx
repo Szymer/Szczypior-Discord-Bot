@@ -1,13 +1,16 @@
 import { useAuth } from "@/context/AuthContext";
 import StatCard from "@/components/StatCard";
-import { roundResults } from "@/lib/mockData";
+import { getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 
 const DashboardPage = () => {
   const { user } = useAuth();
   if (!user) return null;
 
-  const avgPoints = (roundResults.reduce((s, r) => s + r.pointsEarned, 0) / roundResults.length).toFixed(1);
-  const lastRound = roundResults[0];
+  const activities = getPlayerActivities(user.id);
+  const lastActivity = activities[0];
+  const avgPointsPerActivity = activities.length > 0
+    ? Math.round(user.totalPoints / activities.length)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -18,26 +21,34 @@ const DashboardPage = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="POZYCJA" value={`#${user.rank}`} sub="W TABELI GŁÓWNEJ" variant="primary" />
-        <StatCard label="PUNKTY" value={user.points} sub={`DIFF: ${user.pointsDiff > 0 ? "+" : ""}${user.pointsDiff}`} variant="primary" />
-        <StatCard label="MECZE" value={user.matchesPlayed} sub="ŁĄCZNIE ROZEGRANE" />
-        <StatCard label="SKUTECZNOŚĆ" value={`${user.accuracy}%`} sub="WIN RATE" variant="accent" />
+        <StatCard label="PUNKTY" value={user.totalPoints.toLocaleString()} sub={`DIFF: ${user.pointsDiff > 0 ? "+" : ""}${user.pointsDiff}`} variant="primary" />
+        <StatCard label="AKTYWNOŚCI" value={user.totalActivities} sub="ŁĄCZNIE WYKONANYCH" />
+        <StatCard label="DYSTANS" value={`${user.totalDistanceKm} km`} sub="ŁĄCZNY DYSTANS" variant="accent" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="ZWYCIĘSTWA" value={user.wins} />
-        <StatCard label="PORAŻKI" value={user.losses} />
-        <StatCard label="REMISY" value={user.draws} />
-        <StatCard label="ŚR. PKT/RUNDA" value={avgPoints} />
+        <StatCard label="BIEGANIE" value={`${user.runningKm} km`} sub="ŁĄCZNIE" />
+        <StatCard label="PŁYWANIE" value={`${user.swimmingKm} km`} sub="ŁĄCZNIE" />
+        <StatCard label="ROWER/ROLKI" value={`${user.cyclingKm} km`} sub="ŁĄCZNIE" />
+        <StatCard label="SPACER" value={`${user.walkingKm} km`} sub="ŁĄCZNIE" />
       </div>
 
-      {lastRound && (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label="CZAS ŁĄCZNY" value={formatDuration(user.totalDurationMin)} />
+        <StatCard label="ŚR. PKT/AKT." value={avgPointsPerActivity} />
+        <StatCard label="NAJLEPSZE TEMPO" value={user.bestPaceMinPerKm > 0 ? `${formatPace(user.bestPaceMinPerKm)}/km` : "—"} sub="BIEGANIE" />
+        <StatCard label="UL. AKTYWNOŚĆ" value={ACTIVITY_CONFIG[user.favoriteActivity].emoji} sub={ACTIVITY_CONFIG[user.favoriteActivity].label} />
+      </div>
+
+      {lastActivity && (
         <div className="border border-border bg-card p-4">
-          <p className="text-tactical text-muted-foreground mb-2">// OSTATNIA RUNDA</p>
+          <p className="text-tactical text-muted-foreground mb-2">// OSTATNIA AKTYWNOŚĆ</p>
           <div className="flex flex-wrap gap-6 text-sm">
-            <div><span className="text-muted-foreground">RUNDA:</span> <span className="text-foreground">{lastRound.roundName}</span></div>
-            <div><span className="text-muted-foreground">DATA:</span> <span className="text-foreground">{lastRound.date}</span></div>
-            <div><span className="text-muted-foreground">PUNKTY:</span> <span className="text-primary font-bold">{lastRound.pointsEarned}</span></div>
-            <div><span className="text-muted-foreground">POZYCJA:</span> <span className="text-foreground">#{lastRound.position}/{lastRound.totalParticipants}</span></div>
+            <div><span className="text-muted-foreground">TYP:</span> <span className="text-foreground">{ACTIVITY_CONFIG[lastActivity.type].emoji} {ACTIVITY_CONFIG[lastActivity.type].label}</span></div>
+            <div><span className="text-muted-foreground">DATA:</span> <span className="text-foreground">{lastActivity.date}</span></div>
+            <div><span className="text-muted-foreground">DYSTANS:</span> <span className="text-primary font-bold">{lastActivity.distanceKm} km</span></div>
+            <div><span className="text-muted-foreground">TEMPO:</span> <span className="text-foreground">{formatPace(lastActivity.paceMinPerKm)}/km</span></div>
+            <div><span className="text-muted-foreground">PUNKTY:</span> <span className="text-primary font-bold">{lastActivity.pointsEarned}</span></div>
           </div>
         </div>
       )}

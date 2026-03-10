@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { players } from "@/lib/mockData";
+import { players, ACTIVITY_CONFIG } from "@/lib/mockData";
 import { ArrowUpDown, Search } from "lucide-react";
 
-type SortKey = "rank" | "points" | "wins" | "accuracy" | "matchesPlayed";
+type SortKey = "rank" | "totalPoints" | "totalDistanceKm" | "totalActivities" | "bestPaceMinPerKm";
 
 const RankingPage = () => {
   const { user } = useAuth();
@@ -52,12 +52,12 @@ const RankingPage = () => {
             <tr className="border-b border-border bg-secondary/50">
               <th className="p-3 text-left"><SortHeader label="#" k="rank" /></th>
               <th className="p-3 text-left text-tactical text-muted-foreground">OPERATOR</th>
-              <th className="p-3 text-right"><SortHeader label="PKT" k="points" /></th>
+              <th className="p-3 text-right"><SortHeader label="PKT" k="totalPoints" /></th>
               <th className="p-3 text-right text-tactical text-muted-foreground hidden sm:table-cell">DIFF</th>
-              <th className="p-3 text-right"><SortHeader label="MECZE" k="matchesPlayed" /></th>
-              <th className="p-3 text-right hidden md:table-cell"><SortHeader label="W" k="wins" /></th>
-              <th className="p-3 text-right hidden md:table-cell text-tactical text-muted-foreground">P</th>
-              <th className="p-3 text-right"><SortHeader label="SKUT." k="accuracy" /></th>
+              <th className="p-3 text-right"><SortHeader label="DYSTANS" k="totalDistanceKm" /></th>
+              <th className="p-3 text-right"><SortHeader label="AKT." k="totalActivities" /></th>
+              <th className="p-3 text-right hidden md:table-cell text-tactical text-muted-foreground">UL. AKT.</th>
+              <th className="p-3 text-right hidden lg:table-cell"><SortHeader label="TEMPO" k="bestPaceMinPerKm" /></th>
             </tr>
           </thead>
           <tbody>
@@ -74,14 +74,16 @@ const RankingPage = () => {
                   <td className={`p-3 font-bold ${isMe ? "text-primary" : ""}`}>
                     {p.username} {isMe && <span className="text-xs text-primary ml-1">◄ TY</span>}
                   </td>
-                  <td className="p-3 text-right font-bold text-primary">{p.points}</td>
+                  <td className="p-3 text-right font-bold text-primary">{p.totalPoints.toLocaleString()}</td>
                   <td className={`p-3 text-right hidden sm:table-cell ${p.pointsDiff > 0 ? "text-success" : p.pointsDiff < 0 ? "text-danger" : "text-muted-foreground"}`}>
                     {p.pointsDiff > 0 ? "+" : ""}{p.pointsDiff}
                   </td>
-                  <td className="p-3 text-right">{p.matchesPlayed}</td>
-                  <td className="p-3 text-right hidden md:table-cell text-success">{p.wins}</td>
-                  <td className="p-3 text-right hidden md:table-cell text-danger">{p.losses}</td>
-                  <td className="p-3 text-right">{p.accuracy}%</td>
+                  <td className="p-3 text-right">{p.totalDistanceKm} km</td>
+                  <td className="p-3 text-right">{p.totalActivities}</td>
+                  <td className="p-3 text-right hidden md:table-cell">{ACTIVITY_CONFIG[p.favoriteActivity].emoji}</td>
+                  <td className="p-3 text-right hidden lg:table-cell">
+                    {p.bestPaceMinPerKm > 0 ? `${Math.floor(p.bestPaceMinPerKm)}:${Math.round((p.bestPaceMinPerKm % 1) * 60).toString().padStart(2, "0")}/km` : "—"}
+                  </td>
                 </tr>
               );
             })}
