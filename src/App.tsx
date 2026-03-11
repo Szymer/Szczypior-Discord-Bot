@@ -8,6 +8,9 @@ import RankingPage from "@/pages/RankingPage";
 import StatsPage from "@/pages/StatsPage";
 import HistoryPage from "@/pages/HistoryPage";
 import RulesPage from "@/pages/RulesPage";
+import HomePage from "@/pages/HomePage";
+import ChallengePage from "@/pages/ChallengePage";
+import EventPage from "@/pages/EventPage";
 import AppLayout from "@/components/AppLayout";
 import NotFound from "@/pages/NotFound";
 
