@@ -13,7 +13,7 @@ const LoginPage = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (login(username, password)) {
-      navigate("/dashboard");
+      navigate("/home");
     } else {
       setError("BŁĄD AUTORYZACJI — NIEPRAWIDŁOWE DANE");
     }
