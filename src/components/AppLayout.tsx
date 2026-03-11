@@ -3,9 +3,10 @@ import { useAuth } from "@/context/AuthContext";
 import { BarChart3, Home, LogOut, Medal, ScrollText, Shield, BookOpen } from "lucide-react";
 
 const navItems = [
-  { to: "/dashboard", label: "PANEL", icon: Home },
+  { to: "/home", label: "START", icon: Home },
+  { to: "/dashboard", label: "PANEL", icon: BarChart3 },
   { to: "/ranking", label: "RANKING", icon: Medal },
-  { to: "/stats", label: "STATYSTYKI", icon: BarChart3 },
+  { to: "/stats", label: "STATYSTYKI", icon: Shield },
   { to: "/history", label: "HISTORIA", icon: ScrollText },
   { to: "/rules", label: "ZASADY", icon: BookOpen },
 ];
