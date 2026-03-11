@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS activities (
     special_mission_id INTEGER REFERENCES special_missions(id) ON DELETE SET NULL,
     mission_bonus_points INTEGER DEFAULT 0,
     total_points INTEGER NOT NULL DEFAULT 0,
+    challenge_id INTEGER REFERENCES challenges(id),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     message_id TEXT,
     message_timestamp TEXT,
@@ -111,6 +112,7 @@ CREATE INDEX idx_activities_iid ON activities(iid);
 CREATE INDEX idx_activities_type ON activities(activity_type);
 CREATE INDEX idx_activities_mission ON activities(special_mission_id) WHERE special_mission_id IS NOT NULL;
 CREATE INDEX idx_activities_message_id ON activities(message_id) WHERE message_id IS NOT NULL;
+CREATE INDEX idx_activities_challenge ON activities(challenge_id);
 
 COMMENT ON TABLE activities IS 'User fitness activities with complete point calculation';
 COMMENT ON COLUMN activities.iid IS 'Unique ID from Discord: timestamp_messageid';
@@ -119,6 +121,39 @@ COMMENT ON COLUMN activities.weight_bonus_points IS 'Bonus for carrying weight (
 COMMENT ON COLUMN activities.elevation_bonus_points IS 'Bonus for elevation gain';
 COMMENT ON COLUMN activities.mission_bonus_points IS 'Bonus from completing special mission';
 COMMENT ON COLUMN activities.total_points IS 'Sum of all point types';
+COMMENT ON COLUMN activities.challenge_id IS 'Foreign key to challenges table';
+
+-- ============================================================================
+-- TABLE: challenges
+-- ============================================================================
+-- Stores information about challenges
+CREATE TABLE IF NOT EXISTS challenges (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    rules JSONB,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE challenges IS 'Challenges with rules and active status';
+COMMENT ON COLUMN challenges.rules IS 'JSONB field to store challenge rules';
+
+-- ============================================================================
+-- TABLE: challenge_participants
+-- ============================================================================
+-- Tracks participants in challenges
+CREATE TABLE IF NOT EXISTS challenge_participants (
+    id SERIAL PRIMARY KEY,
+    challenge_id INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE challenge_participants IS 'Participants of challenges';
+COMMENT ON COLUMN challenge_participants.joined_at IS 'Timestamp when the user joined the challenge';
 
 -- ============================================================================
 -- VIEWS

@@ -3,7 +3,14 @@
   "dockerComposeFile": "docker-compose.dev.yml",
   "service": "workspace",
   "workspaceFolder": "/workspaces/Szczypior-Discord-Bot",
-  "forwardPorts": [8000, 3000],
+  "runArgs": ["--env-file", ".env"], 
+  "remoteEnv": {
+    "DATABASE_URL": "${localEnv:DATABASE_URL}",
+    "DISCORD_TOKEN": "${localEnv:DISCORD_TOKEN}"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },  "forwardPorts": [8000, 3000],
   "runServices": ["db-service"],
   "customizations": {
     "vscode": {
@@ -12,7 +19,10 @@
         "ms-python.black-formatter",
         "ms-azuretools.vscode-docker",
         "ms-python.debugpy",
-        "bradlc.vscode-tailwindcss"
+        "bradlc.vscode-tailwindcss",
+        "formulahendry.docker-explorer",
+        "GitHub.copilot-chat",
+        "tht13.python"
       ]
     }
   },

@@ -58,5 +58,3 @@ class UserRankingRead(BaseModel):
     elevation_bonus_points: int
     mission_bonus_points: int
     last_activity_at: datetime | None
-
-    model_config = {"from_attributes": True}

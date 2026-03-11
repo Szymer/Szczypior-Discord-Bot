@@ -5,6 +5,8 @@ services:
       - ..:/workspaces/Szczypior-Discord-Bot:cached
       - /var/run/docker.sock:/var/run/docker.sock  # ← DOCKER CLI
     working_dir: /workspaces/Szczypior-Discord-Bot
+    env_file:
+      - ../.env
     environment:
       - DATABASE_URL
       - DISCORD_TOKEN
@@ -19,6 +21,8 @@ services:
       dockerfile: infrastructure/docker/db-service.Dockerfile
     ports:
       - "8000:80"
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: ${DATABASE_URL}
     volumes:

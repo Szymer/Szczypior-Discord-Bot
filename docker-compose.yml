@@ -2,14 +2,18 @@ version: '3.9'
 
 services:
   db-service:
-    build: ../../services/db-service
+    build:
+      context: .
+      dockerfile: infrastructure/docker/db-service.Dockerfile
     ports:
-      - "8000:8000"
+      - "8000:80"
+    env_file:
+      - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
       FRONTEND_URL: http://localhost:3000
     volumes:
-      - ../../services/db-service/app:/code/app:ro
+      - ./services/db-service/app:/app/app:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
     networks:
       - szczypior-network
@@ -21,7 +25,9 @@ services:
       retries: 3
 
   discord-bot:
-    build: ../../services/discord-bot
+    build:
+      context: .
+      dockerfile: infrastructure/docker/discord-bot.Dockerfile
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       API_URL: http://db-service:80
@@ -33,14 +39,16 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ../../services/frontend
+    build:
+      context: .
+      dockerfile: infrastructure/docker/django.Dockerfile
     ports:
       - "3000:8001"
     environment:
       API_URL: http://db-service:80
       SECRET_KEY: ${SECRET_KEY}
     volumes:
-      - ../../services/frontend:/app
+      - ./services/frontend:/app
     depends_on:
       db-service:
         condition: service_healthy
