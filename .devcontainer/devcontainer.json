@@ -1,17 +1,22 @@
 {
-  "name": "Szczypior Python Dev",
+"name": "Szczypior Python Dev",
   "dockerComposeFile": "docker-compose.dev.yml",
   "service": "workspace",
   "workspaceFolder": "/workspaces/Szczypior-Discord-Bot",
-  "runArgs": ["--env-file", ".env"], 
-  "remoteEnv": {
-    "DATABASE_URL": "${localEnv:DATABASE_URL}",
-    "DISCORD_TOKEN": "${localEnv:DISCORD_TOKEN}"
+  "settings": {
+    "python.pythonPath": "/usr/local/bin/python",
+    "python.formatting.provider": "black",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "editor.formatOnSave": true
   },
-  "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
-  },  "forwardPorts": [8000, 3000],
-  "runServices": ["db-service"],
+  "forwardPorts": [
+    8000,
+    3000
+  ],
+  "runServices": [
+    "db-service"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -27,8 +32,5 @@
     }
   },
   "postCreateCommand": "pip install -r services/db-service/requirements.txt",
-  "remoteEnv": {
-    "DATABASE_URL": "${localEnv:DATABASE_URL}",
-    "DISCORD_TOKEN": "${localEnv:DISCORD_TOKEN}"
-  }
-}
+  "remoteUser": "root"
+ }

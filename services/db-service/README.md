@@ -16,7 +16,13 @@ uvicorn app.main:app --app-dir services/db-service --reload --port 8080
 
 ## Env
 Wymagane zmienne:
-- `DATABASE_URL`
+- `user`
+- `password`
+- `host`
+- `port`
+- `dbname`
+
+Alternatywnie można podać pojedyncze `DATABASE_URL`, ale dla Supabase Session Pooler preferowany jest zestaw powyższych pól, z automatycznie dodawanym `sslmode=require`.
 
 ## API (MVP)
 Prefix: `/api/v1`

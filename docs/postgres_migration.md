@@ -2,15 +2,21 @@
 
 ## 1. Połączenie z bazą danych
 
-Twój connection string Supabase:
+Użyj connection stringa z Supabase Session Pooler (IPv4):
 ```
-DATABASE_URL=postgresql://postgres:XjQFUjFcMGkRsqhq@db.wpvjryhrhigqqccblkav.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.[project-ref]:[db-password]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
 ```
+
+Skąd go wziąć:
+1. Zaloguj się do Supabase Dashboard.
+2. Przejdź do Settings → Database.
+3. W sekcji Connection string wybierz Session pooler.
+4. Skopiuj wariant z hostem `aws-0-...pooler.supabase.com` i portem `6543`.
 
 Dodaj do `.env`:
 ```bash
 # PostgreSQL Database
-DATABASE_URL=postgresql://postgres:XjQFUjFcMGkRsqhq@db.wpvjryhrhigqqccblkav.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.[project-ref]:[db-password]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
 ```
 
 ## 2. Wykonanie migracji
@@ -24,7 +30,7 @@ DATABASE_URL=postgresql://postgres:XjQFUjFcMGkRsqhq@db.wpvjryhrhigqqccblkav.supa
 
 ### Opcja B: Przez psql (terminal)
 ```bash
-psql postgresql://postgres:XjQFUjFcMGkRsqhq@db.wpvjryhrhigqqccblkav.supabase.co:5432/postgres < infrastructure/postgres/init.sql
+psql postgresql://postgres.[project-ref]:[db-password]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres < infrastructure/postgres/init.sql
 ```
 
 ### Opcja C: Przez Python script

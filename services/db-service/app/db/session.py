@@ -2,11 +2,18 @@ from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
 
-engine = create_engine(settings.database_url, future=True, pool_pre_ping=True)
+# Supabase pooler already manages connections, so disable SQLAlchemy pooling.
+engine = create_engine(
+    settings.resolved_database_url,
+    future=True,
+    pool_pre_ping=True,
+    poolclass=NullPool,
+)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 

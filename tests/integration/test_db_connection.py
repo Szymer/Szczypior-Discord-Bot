@@ -43,6 +43,7 @@ sys.path.insert(0, str(DB_SERVICE_ROOT))
 import os  # noqa: E402
 
 from sqlalchemy import create_engine, inspect, text  # noqa: E402
+from sqlalchemy.engine import URL  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 
@@ -50,9 +51,29 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 def _get_database_url() -> str:
     url = os.getenv("DATABASE_URL")
-    if not url:
-        pytest.skip("Brak DATABASE_URL w środowisku — pomiń test integracyjny")
-    return url
+    if url:
+        return url
+
+    user = os.getenv("user")
+    password = os.getenv("password")
+    host = os.getenv("host")
+    port = os.getenv("port")
+    dbname = os.getenv("dbname")
+
+    if not all([user, password, host, port, dbname]):
+        pytest.skip(
+            "Brak DATABASE_URL i kompletu user/password/host/port/dbname w środowisku — pomiń test integracyjny"
+        )
+
+    return URL.create(
+        "postgresql+psycopg2",
+        username=user,
+        password=password,
+        host=host,
+        port=int(port),
+        database=dbname,
+        query={"sslmode": "require"},
+    ).render_as_string(hide_password=False)
 
 
 def _make_session():
@@ -67,13 +88,12 @@ def _make_session():
 @pytest.mark.integration
 def test_database_url_is_configured():
     """
-    Sprawdza, że DATABASE_URL jest ustawiony i wskazuje na Postgres.
+    Sprawdza, że konfiguracja połączenia jest ustawiona i wskazuje na Postgres.
     To pierwszy test — jeśli on padnie, nie ma sensu sprawdzać reszty.
     """
-    url = os.getenv("DATABASE_URL")
-    assert url, "DATABASE_URL nie jest ustawiony w środowisku ani w .env"
+    url = _get_database_url()
     assert url.startswith("postgresql"), (
-        f"DATABASE_URL powinien wskazywać na PostgreSQL, a zaczyna się od: {url[:30]}..."
+        f"Konfiguracja bazy powinna wskazywać na PostgreSQL, a zaczyna się od: {url[:30]}..."
     )
 
 
