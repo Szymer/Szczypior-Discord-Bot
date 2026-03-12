@@ -1,5 +1,5 @@
 {
-"name": "Szczypior Python Dev",
+  "name": "Szczypior Python Dev",
   "dockerComposeFile": "docker-compose.dev.yml",
   "service": "workspace",
   "workspaceFolder": "/workspaces/Szczypior-Discord-Bot",
@@ -31,6 +31,6 @@
       ]
     }
   },
-  "postCreateCommand": "pip install -r services/db-service/requirements.txt",
+  "postCreateCommand": "pip install -r services/db-service/requirements.txt && pip install -r services/discord-bot/requirements.txt",
   "remoteUser": "root"
- }
+}

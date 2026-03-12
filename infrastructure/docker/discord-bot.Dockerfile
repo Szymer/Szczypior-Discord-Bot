@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Skopiuj kod bota (z services/discord-bot/)
 COPY services/discord-bot /app
 
+COPY libs /app/libs
+
 # Skopiuj skrypt startowy (jeśli jest w infrastructure/docker/)
 COPY start.sh /app/start.sh
 RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh

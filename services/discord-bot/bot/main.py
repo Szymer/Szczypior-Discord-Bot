@@ -11,18 +11,15 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from .sheets_manager import SheetsManager
-from .llm_clients import get_llm_client
-from .orchestrator import BotOrchestrator
-from .constants import ACTIVITY_TYPES
-from .utils import (
-    get_display_name, 
-    create_embed, 
-    create_activity_embed,
+from api_menager import APIManager, APIManagerError, APIManagerHTTPError
+from constants import ACTIVITY_TYPES
+from llm_clients import get_llm_client
+from orchestrator import BotOrchestrator
+from utils import (
+    get_display_name,
+    create_embed,
     parse_distance,
     safe_int,
-    aggregate_by_field,
-    calculate_user_totals
 )
 
 # Wczytaj zmienne środowiskowe
@@ -32,21 +29,16 @@ load_dotenv()
 class ExtraFormatter(logging.Formatter):
     """Formatter który wyświetla pola z extra jako JSON."""
     def format(self, record):
-        # Pobierz standardowe formatowanie
         message = super().format(record)
-        
-        # Dodaj pola extra jako JSON (jeśli są)
-        extra_fields = {k: v for k, v in record.__dict__.items() 
+        extra_fields = {k: v for k, v in record.__dict__.items()
                        if k not in ['name', 'msg', 'args', 'created', 'filename', 'funcName',
                                    'levelname', 'levelno', 'lineno', 'module', 'msecs',
                                    'message', 'pathname', 'process', 'processName',
                                    'relativeCreated', 'thread', 'threadName', 'exc_info',
                                    'exc_text', 'stack_info', 'asctime']}
-        
         if extra_fields:
             import json
             message += f" | {json.dumps(extra_fields, ensure_ascii=False, default=str)}"
-        
         return message
 
 formatter = ExtraFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -68,11 +60,11 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
 intents.guilds = True
-intents.members = True  # Potrzebne do pobierania informacji o członkach
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Menedżer Google Sheets
-sheets_manager = None
+# Globalny APIManager
+api_manager: Optional[APIManager] = None
 
 # Klient LLM
 llm_client = None
@@ -80,13 +72,23 @@ llm_client = None
 # Orkiestrator
 orchestrator = None
 
+# Zestaw monitorowanych kanałów (ID jako stringi) – wczytany z aktywnych eventów
+monitored_channel_ids: set[str] = set()
+
+# Mapa kanał -> challenge_id (wczytana z aktywnych challenge'y)
+channel_to_challenge: dict[str, int] = {}
+
+# Jednorazowy startup sync backlogu wiadomości dla aktywnych challenge'y
+startup_sync_completed = False
+
 
 @bot.event
 async def on_ready():
     """Wywoływane gdy bot jest gotowy."""
-    global sheets_manager, llm_client, orchestrator
+    global api_manager, llm_client, orchestrator, monitored_channel_ids, channel_to_challenge, startup_sync_completed
     logger.info(f"{bot.user} is online", extra={"bot_id": bot.user.id})
-    
+    active_challenges = []
+
     # Monitor pamięci - START
     try:
         import psutil
@@ -97,49 +99,87 @@ async def on_ready():
     except ImportError:
         logger.warning("psutil not installed - memory monitoring disabled")
         process = None
-    
-    # Inicjalizacja Google Sheets (opcjonalne - tylko jeśli skonfigurowane)
+
+    # Inicjalizacja APIManager
     try:
-        sheets_manager = SheetsManager()
-        sheets_manager.setup_headers()
-        logger.info("Google Sheets connected and ready")
-        
-        # Buduj cache IID dla szybkiego sprawdzania duplikatów
-        await sheets_manager.build_iid_cache()
+        api_manager = APIManager()
+        logger.info("APIManager initialized", extra={"base_url": api_manager.api_base_url})
     except Exception:
-        logger.warning("Google Sheets unavailable", exc_info=True)
-        logger.info("Bot will work without data persistence")
-    
-    # Inicjalizacja LLM Client (opcjonalne - tylko jeśli skonfigurowane)
+        logger.error("Failed to initialize APIManager", exc_info=True)
+        api_manager = None
+
+    # --- Pobierz aktywne challenge'e i ustal kanały do monitorowania ---
+    # Debug override: CHALLENGE_ID wymusza jeden konkretny challenge dla wszystkich kanałów
+    debug_challenge_id = os.getenv("CHALLENGE_ID", "").strip()
+
+    # Debug override: MONITORED_CHANNEL_ID wymusza jeden konkretny kanał
+    debug_channel_override = os.getenv("MONITORED_CHANNEL_ID", "").strip()
+
+    if api_manager:
+        try:
+            active_challenges = api_manager.get_active_challenges()
+            # Zbuduj mapę kanał -> challenge_id
+            for ch in active_challenges:
+                if ch.discord_channel_id:
+                    channel_to_challenge[ch.discord_channel_id] = ch.id
+            logger.info(
+                "Loaded active challenges",
+                extra={
+                    "challenge_count": len(active_challenges),
+                    "channel_to_challenge": channel_to_challenge,
+                }
+            )
+        except APIManagerError:
+            logger.warning("Could not fetch active challenges from API", exc_info=True)
+
+    # Debug override challenge_id – nadpisuje mapowanie for all channels
+    if debug_challenge_id:
+        try:
+            debug_challenge_int = int(debug_challenge_id)
+            for ch_id in list(channel_to_challenge.keys()):
+                channel_to_challenge[ch_id] = debug_challenge_int
+            logger.warning(
+                "DEBUG OVERRIDE: forcing challenge_id for all channels",
+                extra={"challenge_id": debug_challenge_int}
+            )
+        except ValueError:
+            logger.error(f"Invalid CHALLENGE_ID env value: {debug_challenge_id!r}")
+
+    # Ustal monitorowane kanały: ze schedy challenge'y + debug override
+    if debug_channel_override and debug_channel_override != "your_channel_id_here":
+        monitored_channel_ids = {debug_channel_override}
+        # Jeśli jest debug override kanału + debug override challenge, dodaj do mapy
+        if debug_challenge_id:
+            try:
+                channel_to_challenge[debug_channel_override] = int(debug_challenge_id)
+            except ValueError:
+                pass
+        logger.warning(
+            "DEBUG OVERRIDE: monitoring single channel from env",
+            extra={"channel_id": debug_channel_override}
+        )
+    else:
+        monitored_channel_ids = set(channel_to_challenge.keys())
+
+    if not monitored_channel_ids:
+        logger.warning("No monitored channels configured – bot will process ALL channels")
+
+    # Inicjalizacja LLM Client
     try:
         llm_client = get_llm_client()
         model_info = llm_client.get_model_info()
         logger.info("LLM Client connected", extra={"model": model_info.get('model_name', 'unknown')})
     except Exception:
         logger.warning("LLM Client unavailable", exc_info=True)
-        logger.info("Bot will work without AI functions")
-    
+
     # Inicjalizacja orkiestratora
-    orchestrator = BotOrchestrator(bot, llm_client, sheets_manager)
-    
+    orchestrator = BotOrchestrator(bot, llm_client, api_manager)
+
     # Monitor pamięci - PO INICJALIZACJI
     if process:
         mem_after_init = process.memory_info()
         logger.info(f"🔍 MEMORY AFTER INIT: RSS={mem_after_init.rss/1024/1024:.2f} MB (Δ {(mem_after_init.rss-mem_start.rss)/1024/1024:.2f} MB)")
-    
-    # Synchronizacja historii czatu z Google Sheets
-    if sheets_manager and llm_client:
-        logger.info("Starting chat history sync")
-        await orchestrator.sync_chat_history()
-        
-        # Monitor pamięci - PO SYNCHRONIZACJI (KLUCZOWY POMIAR!)
-        if process:
-            import gc
-            gc.collect()  # Wymuś garbage collection
-            mem_after_sync = process.memory_info()
-            logger.info(f"🔍 MEMORY AFTER SYNC: RSS={mem_after_sync.rss/1024/1024:.2f} MB (Δ {(mem_after_sync.rss-mem_after_init.rss)/1024/1024:.2f} MB)")
-            logger.info(f"🎯 TOTAL MEMORY USED: {mem_after_sync.rss/1024/1024:.2f} MB (from start: +{(mem_after_sync.rss-mem_start.rss)/1024/1024:.2f} MB)")
-    
+
     # Synchronizacja komend slash z Discord
     try:
         synced = await bot.tree.sync()
@@ -147,27 +187,34 @@ async def on_ready():
     except Exception:
         logger.error("Failed to sync slash commands", exc_info=True)
 
+    if orchestrator and not startup_sync_completed:
+        try:
+            startup_sync_summary = await orchestrator.sync_active_challenges(active_challenges)
+            startup_sync_completed = True
+            logger.info("Startup challenge sync finished", extra=startup_sync_summary)
+        except Exception:
+            logger.error("Startup challenge sync failed", exc_info=True)
 
 
 @bot.event
 async def on_message(message):
     """Wywoływane gdy bot otrzyma wiadomość."""
-    # Ignoruj własne wiadomości
     if message.author == bot.user:
         return
-    
-    # Filtruj tylko wiadomości z monitorowanego kanału
-    monitored_channel_id = os.getenv("MONITORED_CHANNEL_ID")
-    if monitored_channel_id and str(message.channel.id) != monitored_channel_id:
+
+    # Filtr kanałów – jeśli lista nie jest pusta, przepuszczamy tylko skonfigurowane kanały
+    if monitored_channel_ids and str(message.channel.id) not in monitored_channel_ids:
         return
-    
+
     # Przetwarzaj komendy (!)
     await bot.process_commands(message)
-    
+
     # Jeśli wiadomość nie jest komendą i orkiestrator jest dostępny
     if not message.content.startswith('!') and orchestrator:
         await orchestrator.handle_message(message)
 
+
+# ── Komendy podstawowe ─────────────────────────────────────────────────────
 
 @bot.command(name="ping")
 async def ping(ctx):
@@ -181,182 +228,61 @@ async def hello(ctx):
     await ctx.send(f"Cześć {ctx.author.mention}! Jestem Szczypior Bot! 🌿")
 
 
-
-@bot.command(name="typy_aktywnosci")
-async def list_activities(ctx):
-    """
-    Wyświetla dostępne typy aktywności.
-    """
-    fields = []
-    for activity, info in ACTIVITY_TYPES.items():
-        bonuses_text = ", ".join(info['bonuses']) if info['bonuses'] else "brak"
-        min_dist_text = f"{info['min_distance']} km" if info['min_distance'] > 0 else "BRAK"
-        
-        fields.append({
-            'name': f"{info['emoji']} {info['display_name']}",
-            'value': (
-                f"**{info['base_points']} pkt/{info['unit']}**\n"
-                f"Min. dystans: {min_dist_text}\n"
-                f"Bonusy: {bonuses_text}"
-            ),
-            'inline': True
-        })
-    
-    embed = create_embed(
-        title="🏃 Dostępne typy aktywności",
-        description="Lista wszystkich typów aktywności zgodnie z wytycznymi konkursu:",
-        color=discord.Color.green(),
-        fields=fields,
-        footer="Użyj: !dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]"
-    )
-    await ctx.send(embed=embed)
-
-
-@bot.command(name="dodaj_aktywnosc")
-async def add_activity(ctx, activity_type: str, distance: float, 
-                       weight: Optional[float] = None, elevation: Optional[float] = None):
-    """
-    Dodaje nową aktywność.
-    
-    Przykłady użycia:
-    !dodaj_aktywnosc bieganie_teren 5.2
-    !dodaj_aktywnosc bieganie_teren 10 5 (z obciążeniem 5kg)
-    !dodaj_aktywnosc bieganie_teren 15 0 200 (z przewyższeniem 200m)
-    !dodaj_aktywnosc rower 25 0 150
-    """
-    activity_type = activity_type.lower()
-    
-    if activity_type not in ACTIVITY_TYPES:
-        available = ", ".join([f"`{k}`" for k in ACTIVITY_TYPES.keys()])
-        await ctx.send(
-            f"❌ Nieznany typ aktywności: `{activity_type}`\n"
-            f"Dostępne typy: {available}\n"
-            f"Użyj `!typy_aktywnosci` aby zobaczyć szczegóły."
-        )
-        return
-    
-    if distance <= 0:
-        await ctx.send("❌ Wartość musi być większa niż 0!")
-        return
-    
-    # Oblicz punkty (używamy orkiestratora jeśli dostępny)
-    if orchestrator:
-        points, error_msg = orchestrator.calculate_points(activity_type, distance, weight, elevation)
-    else:
-        points, error_msg = 0, "Orkiestrator niedostępny"
-    
-    if error_msg:
-        await ctx.send(f"❌ {error_msg}")
-        return
-    
-    # Zapisz do Google Sheets jeśli dostępny
-    info = ACTIVITY_TYPES[activity_type]
-    username = get_display_name(ctx.author)
-    saved = False
-    actual_points = points  # Domyślnie używamy lokalnie obliczonych punktów
-    
-    if sheets_manager:
-        try:
-            # Określ czy jest obciążenie > 5kg
-            has_weight = weight is not None and weight > 5
-            
-            # Stwórz timestamp jako int (zgodnie z formatem IID)
-            timestamp_int = int(ctx.message.created_at.timestamp())
-            
-            saved, row_number = await sheets_manager.add_activity(
-                username=username,
-                activity_type=activity_type,
-                distance=distance,
-                has_weight=has_weight,
-                elevation=elevation,
-                timestamp=None,
-                message_id=str(ctx.message.id),
-                message_timestamp=str(timestamp_int)
-            )
-            
-            # Jeśli zapisano, pobierz punkty z arkusza
-            if saved and row_number > 0:
-                sheet_points = await sheets_manager.get_points_from_row(row_number)
-                if sheet_points is not None:
-                    actual_points = sheet_points
-        except Exception as e:
-            print(f"Błąd zapisu do Sheets: {e}")
-    
-    # Przygotuj dodatkowe pola
-    additional_fields = []
-    if weight and weight > 0:
-        additional_fields.append({'name': "Obciążenie", 'value': f"{weight} kg", 'inline': True})
-    if elevation and elevation > 0:
-        additional_fields.append({'name': "Przewyższenie", 'value': f"{elevation} m", 'inline': True})
-    
-    # Użyj create_activity_embed z utils
-    embed = create_activity_embed(
-        activity_info=info,
-        username=ctx.author.mention,
-        distance=distance,
-        points=actual_points,
-        additional_fields=additional_fields,
-        saved=saved
-    )
-    
-    await ctx.send(embed=embed)
-
+# ── Komendy aktywności ─────────────────────────────────────────────────────
 
 @bot.command(name="moja_historia")
 async def my_history(ctx, limit: int = 5):
     """
     Wyświetla ostatnie aktywności użytkownika.
-    
+
     Przykład: !moja_historia 10
     """
-    if not sheets_manager:
-        await ctx.send("❌ Google Sheets nie jest skonfigurowany. Użyj `!pomoc` aby dowiedzieć się jak go skonfigurować.")
+    if not api_manager:
+        await ctx.send("❌ API nie jest dostępne.")
         return
-    
-    username = get_display_name(ctx.author)
-    history = await sheets_manager.get_user_history(username)
-    
+
+    try:
+        history = api_manager.get_user_activities(str(ctx.author.id), limit=limit)
+    except APIManagerError as e:
+        await ctx.send(f"❌ Błąd pobierania historii: {e}")
+        return
+
     if not history:
-        await ctx.send(f"{ctx.author.mention}, nie masz jeszcze żadnych zapisanych aktywności! Użyj `!dodaj_aktywnosc`")
+        await ctx.send(f"{ctx.author.mention}, nie masz jeszcze żadnych zapisanych aktywności!")
         return
-    
-    # Ogranicz do ostatnich N wpisów
-    history = history[-limit:][::-1]  # Odwróć aby najnowsze były na górze
-    
+
     fields = []
-    for record in history:
-        activity = record.get('Aktywność', 'N/A')
-        distance = parse_distance(record.get('Dystans (km)', 0))
-        points = safe_int(record.get('Punkty', 0))
-        date = record.get('Data', 'N/A')
-        
-        emoji = ACTIVITY_TYPES.get(activity.lower(), {}).get('emoji', '📝')
+    for act in history:
+        emoji = ACTIVITY_TYPES.get(act.activity_type, {}).get('emoji', '📝')
         fields.append({
-            'name': f"{emoji} {activity} - {date}",
-            'value': f"Wartość: {distance} | Punkty: {points} 🏆",
+            'name': f"{emoji} {act.activity_type} - {act.created_at.strftime('%Y-%m-%d')}",
+            'value': f"Dystans: {act.distance_km} km | Punkty: {act.total_points} 🏆",
             'inline': False
         })
-    
+
     embed = create_embed(
         title=f"📊 Historia aktywności - {get_display_name(ctx.author)}",
         color=discord.Color.blue(),
         fields=fields
     )
-    
     await ctx.send(embed=embed)
 
 
 @bot.command(name="moje_punkty")
 async def my_points(ctx):
     """Wyświetla sumę punktów użytkownika."""
-    if not sheets_manager:
-        await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
+    if not api_manager:
+        await ctx.send("❌ API nie jest dostępne.")
         return
-    
-    username = get_display_name(ctx.author)
-    total_points = sheets_manager.get_user_total_points(username)
-    history = await sheets_manager.get_user_history(username)
-    
+
+    try:
+        history = api_manager.get_user_activities(str(ctx.author.id), limit=200)
+    except APIManagerError as e:
+        await ctx.send(f"❌ Błąd pobierania danych: {e}")
+        return
+
+    total_points = sum(act.total_points for act in history)
+
     embed = create_embed(
         title="🏆 Twoje punkty",
         color=discord.Color.gold(),
@@ -366,7 +292,170 @@ async def my_points(ctx):
             {'name': "Liczba aktywności", 'value': f"{len(history)}", 'inline': True}
         ]
     )
-    
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="ranking")
+async def ranking(ctx, limit: int = 10):
+    """
+    Wyświetla ranking użytkowników według punktów.
+
+    Przykład: !ranking 5
+    """
+    if not api_manager:
+        await ctx.send("❌ API nie jest dostępne.")
+        return
+
+    try:
+        top_users = api_manager.get_rankings(limit=limit)
+    except APIManagerError as e:
+        await ctx.send(f"❌ Błąd pobierania rankingu: {e}")
+        return
+
+    if not top_users:
+        await ctx.send("📊 Brak danych do wyświetlenia rankingu.")
+        return
+
+    medals = ["🥇", "🥈", "🥉"]
+    fields = []
+    for i, user in enumerate(top_users):
+        medal = medals[i] if i < 3 else f"{i+1}."
+        fields.append({
+            'name': f"{medal} {user.display_name}",
+            'value': f"**{user.total_points}** punktów 🏆 | {user.total_activities} aktywności",
+            'inline': False
+        })
+
+    embed = create_embed(
+        title="🏆 Ranking użytkowników",
+        description=f"Top {len(top_users)} według punktów:",
+        color=discord.Color.gold(),
+        fields=fields
+    )
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="activity_fix")
+async def activity_fix(ctx, activity_type: str, weight_kg: Optional[float] = None, elevation_m: Optional[int] = None):
+    """
+    Poprawia błędnie rozpoznaną aktywność (tylko admini).
+    Użycie: odpowiedz na wiadomość bota komendą
+      !activity_fix <typ_aktywnosci> [obciazenie_kg] [przewyzszenie_m]
+
+    Przykłady:
+      !activity_fix bieganie_teren
+      !activity_fix bieganie_teren 5
+      !activity_fix bieganie_teren 0 200
+    """
+    # Sprawdź uprawnienia – musi być administrator lub manage_messages
+    if not (ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.manage_messages):
+        await ctx.send("❌ Brak uprawnień. Komenda dostępna tylko dla adminów.")
+        return
+
+    if not api_manager:
+        await ctx.send("❌ API nie jest dostępne.")
+        return
+
+    # Sprawdź czy to odpowiedź na wiadomość
+    if not ctx.message.reference:
+        await ctx.send("❌ Użyj tej komendy odpowiadając na wiadomość bota z rozpoznaną aktywnością.")
+        return
+
+    # Pobierz wiadomość, na którą odpowiada admin
+    try:
+        ref_msg = ctx.message.reference.resolved
+        if ref_msg is None:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+    except (discord.NotFound, discord.HTTPException):
+        await ctx.send("❌ Nie można pobrać oryginalnej wiadomości.")
+        return
+
+    # Sprawdź czy to wiadomość bota
+    if ref_msg.author != bot.user:
+        await ctx.send("❌ Możesz poprawiać tylko wiadomości wysłane przez bota.")
+        return
+
+    # Wyciągnij IID z footera embeda
+    iid = None
+    if ref_msg.embeds:
+        footer = ref_msg.embeds[0].footer
+        if footer and footer.text and footer.text.startswith("IID:"):
+            iid_part = footer.text.split("|")[0].strip()
+            iid = iid_part.replace("IID:", "").strip()
+
+    if not iid:
+        await ctx.send("❌ Nie znaleziono IID aktywności w tej wiadomości. Upewnij się, że odpowiadasz na oryginalną odpowiedź bota.")
+        return
+
+    # Walidacja nowego typu aktywności
+    if activity_type not in ACTIVITY_TYPES:
+        valid_types = ", ".join(ACTIVITY_TYPES.keys())
+        await ctx.send(f"❌ Nieznany typ aktywności: `{activity_type}`\nDostępne: {valid_types}")
+        return
+
+    # Pobierz aktualną aktywność
+    try:
+        current = api_manager.get_activity(iid)
+    except APIManagerHTTPError as e:
+        if e.status_code == 404:
+            await ctx.send(f"❌ Aktywność o IID `{iid}` nie została znaleziona.")
+        else:
+            await ctx.send(f"❌ Błąd API: {e.detail}")
+        return
+    except APIManagerError as e:
+        await ctx.send(f"❌ Błąd połączenia: {e}")
+        return
+
+    # Przelicz punkty z nowymi danymi
+    distance = current.distance_km
+    activity_info = ACTIVITY_TYPES[activity_type]
+    base_pts = int(distance * activity_info["base_points"])
+    bonuses = activity_info.get("bonuses", [])
+
+    w_bonus = 0
+    if weight_kg and weight_kg > 0 and "obciążenie" in bonuses:
+        w_bonus = int((weight_kg / 5) * (distance * activity_info["base_points"] * 0.1))
+
+    e_bonus = 0
+    if elevation_m and elevation_m > 0 and "przewyższenie" in bonuses:
+        e_bonus = int((elevation_m / 100) * (distance * activity_info["base_points"] * 0.05))
+
+    new_total = max(base_pts + w_bonus + e_bonus, 1)
+
+    # Wyślij update do API
+    from libs.shared.schemas.activity import ActivityUpdate
+    payload = ActivityUpdate(
+        activity_type=activity_type,
+        weight_kg=weight_kg,
+        elevation_m=elevation_m,
+        weight_bonus_points=w_bonus,
+        elevation_bonus_points=e_bonus,
+        total_points=new_total,
+    )
+
+    try:
+        updated = api_manager.update_activity(iid, payload)
+    except APIManagerHTTPError as e:
+        await ctx.send(f"❌ Błąd aktualizacji: {e.detail}")
+        return
+    except APIManagerError as e:
+        await ctx.send(f"❌ Błąd połączenia: {e}")
+        return
+
+    info = ACTIVITY_TYPES[updated.activity_type]
+    embed = discord.Embed(
+        title=f"✅ Aktywność poprawiona",
+        color=discord.Color.green(),
+    )
+    embed.add_field(name="IID", value=f"`{updated.iid}`", inline=False)
+    embed.add_field(name="Nowy typ", value=f"{info['emoji']} {info['display_name']}", inline=True)
+    embed.add_field(name="Dystans", value=f"{updated.distance_km} km", inline=True)
+    if weight_kg:
+        embed.add_field(name="🎒 Obciążenie", value=f"{weight_kg} kg", inline=True)
+    if elevation_m:
+        embed.add_field(name="⛰️ Przewyższenie", value=f"{elevation_m} m", inline=True)
+    embed.add_field(name="🏆 Nowe punkty", value=f"**{updated.total_points}**", inline=False)
+    embed.set_footer(text=f"Poprawiono przez {get_display_name(ctx.author)}")
     await ctx.send(embed=embed)
 
 
@@ -390,192 +479,31 @@ async def help_command(ctx):
             {
                 'name': "🏃 Aktywności",
                 'value': (
-                    "`!typy_aktywnosci` - Lista dostępnych aktywności\n"
-                    "`!dodaj_aktywnosc <typ> <wartość> [obciążenie] [przewyższenie]` - Dodaj aktywność\n"
                     "`!moja_historia [limit]` - Twoje ostatnie aktywności\n"
                     "`!moje_punkty` - Sprawdź swoje punkty"
                 ),
                 'inline': False
             },
             {
-                'name': "📊 Rankingi i statystyki",
-                'value': (
-                    "`!ranking [limit]` - Ranking użytkowników według punktów\n"
-                    "`!stats` - Statystyki całego serwera\n"
-                    "`!stats_aktywnosci` - Najpopularniejsze aktywności"
-                ),
+                'name': "📊 Rankingi",
+                'value': "`!ranking [limit]` - Ranking użytkowników według punktów",
                 'inline': False
             },
             {
-                'name': "📊 Przykłady",
+                'name': "🔧 Admin",
                 'value': (
-                    "`!dodaj_aktywnosc bieganie_teren 5.2`\n"
-                    "`!dodaj_aktywnosc bieganie_teren 10 5` (z 5kg obciążeniem)\n"
-                    "`!dodaj_aktywnosc bieganie_teren 15 0 200` (z 200m przewyższeniem)\n"
-                    "`!dodaj_aktywnosc rower 25` (rower 25km)\n"
-                    "`!moja_historia 10` (ostatnie 10 aktywności)"
+                    "`!activity_fix <typ> [obciazenie_kg] [przewyzszenie_m]` - "
+                    "Odpowiedz na wiadomość bota, aby poprawić rozpoznaną aktywność"
                 ),
                 'inline': False
-            }
+            },
         ],
         footer="Bot stworzony dla miłośników aktywności fizycznej! 🌿"
     )
     await ctx.send(embed=embed)
 
 
-@bot.command(name="ranking")
-async def ranking(ctx, limit: int = 10):
-    """
-    Wyświetla ranking użytkowników według punktów.
-    
-    Przykład: !ranking 5
-    """
-    if not sheets_manager:
-        await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
-        return
-    
-    try:
-        # Pobierz wszystkie rekordy i oblicz totalne punkty
-        all_records = sheets_manager.worksheet.get_all_records()
-        
-        if not all_records:
-            await ctx.send("📊 Brak danych do wyświetlenia rankingu.")
-            return
-        
-        # Użyj calculate_user_totals z utils
-        user_totals = calculate_user_totals(all_records)
-        
-        # Sortuj według punktów malejąco
-        sorted_users = sorted(
-            user_totals.items(), 
-            key=lambda x: x[1]['total_points'], 
-            reverse=True
-        )[:limit]
-        
-        medals = ["🥇", "🥈", "🥉"]
-        fields = []
-        for i, (username, data) in enumerate(sorted_users):
-            medal = medals[i] if i < 3 else f"{i+1}."
-            fields.append({
-                'name': f"{medal} {username}",
-                'value': f"**{data['total_points']}** punktów 🏆",
-                'inline': False
-            })
-        
-        embed = create_embed(
-            title="🏆 Ranking użytkowników",
-            description=f"Top {min(limit, len(sorted_users))} użytkowników według punktów:",
-            color=discord.Color.gold(),
-            fields=fields
-        )
-        
-        await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send(f"❌ Błąd podczas generowania rankingu: {e}")
-
-
-@bot.command(name="stats")
-async def server_stats(ctx):
-    """Wyświetla ogólne statystyki serwera."""
-    if not sheets_manager:
-        await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
-        return
-    
-    try:
-        all_records = sheets_manager.worksheet.get_all_records()
-        
-        if not all_records:
-            await ctx.send("📊 Brak danych do wyświetlenia statystyk.")
-            return
-        
-        # Oblicz statystyki
-        total_activities = len(all_records)
-        unique_users = len(set(r.get('User', '') for r in all_records if r.get('User')))
-        
-        # Użyj parse_distance i safe_int z utils
-        total_points = sum(safe_int(r.get('Punkty', 0)) for r in all_records)
-        total_distance = sum(parse_distance(r.get('Dystans (km)', 0)) for r in all_records)
-        
-        # Najpopularniejsza aktywność
-        activities = [r.get('Aktywność', '') for r in all_records if r.get('Aktywność')]
-        if activities:
-            from collections import Counter
-            most_common = Counter(activities).most_common(1)[0]
-            popular_activity = most_common[0]
-            popular_count = most_common[1]
-        else:
-            popular_activity = "N/A"
-            popular_count = 0
-        
-        embed = create_embed(
-            title="📊 Statystyki serwera",
-            description="Ogólne statystyki wszystkich użytkowników:",
-            color=discord.Color.blue(),
-            fields=[
-                {'name': "👥 Aktywni użytkownicy", 'value': f"**{unique_users}**", 'inline': True},
-                {'name': "📝 Liczba aktywności", 'value': f"**{total_activities}**", 'inline': True},
-                {'name': "🏆 Suma punktów", 'value': f"**{total_points}**", 'inline': True},
-                {'name': "📏 Suma dystansu", 'value': f"**{total_distance:.1f}** km", 'inline': True},
-                {'name': "⭐ Najpopularniejsza aktywność", 'value': f"**{popular_activity}** ({popular_count}x)", 'inline': True}
-            ]
-        )
-        
-        await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send(f"❌ Błąd podczas generowania statystyk: {e}")
-
-
-@bot.command(name="stats_aktywnosci")
-async def activity_stats(ctx):
-    """Wyświetla statystyki według typu aktywności."""
-    if not sheets_manager:
-        await ctx.send("❌ Google Sheets nie jest skonfigurowany.")
-        return
-    
-    try:
-        all_records = sheets_manager.worksheet.get_all_records()
-        
-        if not all_records:
-            await ctx.send("📊 Brak danych do wyświetlenia statystyk.")
-            return
-        
-        # Użyj aggregate_by_field z utils
-        activity_stats_data = aggregate_by_field(all_records, 'Aktywność')
-        
-        # Sortuj według liczby aktywności
-        sorted_activities = sorted(
-            activity_stats_data.items(),
-            key=lambda x: x[1]['count'],
-            reverse=True
-        )
-        
-        fields = []
-        for activity, stats in sorted_activities:
-            info = ACTIVITY_TYPES.get(activity.lower(), {})
-            emoji = info.get('emoji', '📝')
-            unit = info.get('unit', 'km')
-            
-            fields.append({
-                'name': f"{emoji} {activity.capitalize()}",
-                'value': (
-                    f"Liczba: **{stats['count']}**\n"
-                    f"Suma: **{stats['total_distance']:.1f}** {unit}\n"
-                    f"Punkty: **{stats['total_points']}** 🏆"
-                ),
-                'inline': True
-            })
-        
-        embed = create_embed(
-            title="📊 Statystyki aktywności",
-            description="Podsumowanie wszystkich typów aktywności:" if sorted_activities else "Brak zapisanych aktywności.",
-            color=discord.Color.purple(),
-            fields=fields if sorted_activities else None
-        )
-        
-        await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send(f"❌ Błąd podczas generowania statystyk aktywności: {e}")
-
+# ── Komendy slash ──────────────────────────────────────────────────────────
 
 @bot.tree.command(name="podsumowanie", description="Generuje podsumowanie wyników z wybranego okresu z komentarzem AI")
 @app_commands.describe(okres="Wybierz okres do podsumowania")
@@ -583,150 +511,65 @@ async def podsumowanie(
     interaction: discord.Interaction,
     okres: str
 ):
-    """
-    Komenda slash generująca podsumowanie wyników z wybranego okresu.
-    
-    Args:
-        interaction: Interakcja Discord
-        okres: Wybrany okres (caly/tydzien/miesiac/ostatni_tydzien)
-    """
     await interaction.response.defer(thinking=True)
-    
-    if not sheets_manager:
-        await interaction.followup.send("❌ Google Sheets nie jest skonfigurowany.")
+
+    if not api_manager:
+        await interaction.followup.send("❌ API nie jest dostępne.")
         return
-    
+
     if not llm_client:
         await interaction.followup.send("❌ AI Client nie jest skonfigurowany.")
         return
-    
+
     try:
-        # Pobierz wszystkie aktywności
-        all_activities = await sheets_manager.get_all_activities_with_timestamps()
-        
-        if not all_activities:
-            await interaction.followup.send("📊 Brak danych do podsumowania.")
-            return
-        
-        # Filtruj dane według wybranego okresu
-        now = datetime.now()
-        filtered_activities = []
-        period_title = ""
-        
-        if okres == "caly":
-            filtered_activities = all_activities
-            period_title = "Cały konkurs"
-        elif okres == "ostatni_tydzien":
-            # Ostatni tydzień (niedziela-sobota)
-            days_since_sunday = (now.weekday() + 1) % 7
-            last_sunday = now - timedelta(days=days_since_sunday + 7)
-            last_saturday = last_sunday + timedelta(days=6)
-            
-            for a in all_activities:
-                try:
-                    activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
-                    if last_sunday <= activity_date <= last_saturday:
-                        filtered_activities.append(a)
-                except (ValueError, KeyError):
-                    logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
-                    continue
-            period_title = f"Ostatni tydzień ({last_sunday.strftime('%d.%m')} - {last_saturday.strftime('%d.%m')})"
-        elif okres == "biezacy_tydzien":
-            # Bieżący tydzień (od niedzieli do dziś)
-            days_since_sunday = (now.weekday() + 1) % 7
-            this_sunday = now - timedelta(days=days_since_sunday)
-            
-            for a in all_activities:
-                try:
-                    activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
-                    if activity_date >= this_sunday:
-                        filtered_activities.append(a)
-                except (ValueError, KeyError):
-                    logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
-                    continue
-            period_title = f"Bieżący tydzień (od {this_sunday.strftime('%d.%m')})"
-        elif okres == "miesiac":
-            # Ostatni miesiąc kalendarzowy
-            if now.month == 1:
-                last_month_year = now.year - 1
-                last_month = 12
-            else:
-                last_month_year = now.year
-                last_month = now.month - 1
-            
-            for a in all_activities:
-                try:
-                    activity_date = datetime.strptime(a['Data'], "%Y-%m-%d %H:%M:%S")
-                    if activity_date.month == last_month and activity_date.year == last_month_year:
-                        filtered_activities.append(a)
-                except (ValueError, KeyError):
-                    logger.warning(f"Błąd parsowania daty dla aktywności: {a.get('Data', 'brak daty')}", exc_info=True)
-                    continue
-            
-            month_names = ["Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", 
-                          "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"]
-            period_title = f"{month_names[last_month - 1]} {last_month_year}"
-        
-        if not filtered_activities:
-            await interaction.followup.send(f"📊 Brak danych dla okresu: {period_title}")
-            return
-        
-        # Oblicz statystyki
-        stats = _calculate_period_stats(filtered_activities)
-        
-        # Wygeneruj komentarz AI
-        ai_comment = await _generate_ai_summary(stats, period_title)
-        
-        # Utwórz embed
-        embed = discord.Embed(
-            title=f"📊 Podsumowanie: {period_title}",
-            description=ai_comment,
-            color=discord.Color.gold()
-        )
-        
-        # Dodaj pola statystyk
+        top_users = api_manager.get_rankings(limit=10)
+    except APIManagerError as e:
+        await interaction.followup.send(f"❌ Błąd pobierania rankingu: {e}")
+        return
+
+    if not top_users:
+        await interaction.followup.send("📊 Brak danych do podsumowania.")
+        return
+
+    period_names = {
+        "caly": "Cały konkurs",
+        "biezacy_tydzien": "Bieżący tydzień",
+        "ostatni_tydzien": "Ostatni tydzień",
+        "miesiac": "Ostatni miesiąc",
+    }
+    period_title = period_names.get(okres, okres)
+
+    total_points = sum(u.total_points for u in top_users)
+    total_activities = sum(u.total_activities for u in top_users)
+    total_distance = sum(u.total_distance_km for u in top_users)
+    top_scorer = top_users[0] if top_users else None
+
+    ai_comment = await _generate_ai_summary_from_rankings(top_users, period_title)
+
+    embed = discord.Embed(
+        title=f"📊 Podsumowanie: {period_title}",
+        description=ai_comment,
+        color=discord.Color.gold()
+    )
+
+    if top_scorer:
         embed.add_field(
-            name="🏆 Najlepszy wynik",
-            value=f"**{stats['top_scorer']['nick']}** - {stats['top_scorer']['punkty']} pkt",
+            name="🏆 Lider",
+            value=f"**{top_scorer.display_name}** - {top_scorer.total_points} pkt",
             inline=False
         )
-        
-        embed.add_field(
-            name="🏃 Najdłuższy bieg",
-            value=f"**{stats['longest_run']['nick']}** - {stats['longest_run']['dystans']} km ({stats['longest_run']['typ']})",
-            inline=False
-        )
-        
-        if stats.get('longest_swim'):
-            embed.add_field(
-                name="🏊 Najdłuższe pływanie",
-                value=f"**{stats['longest_swim']['nick']}** - {stats['longest_swim']['dystans']} km",
-                inline=False
-            )
-        
-        embed.add_field(
-            name="📈 Łączne statystyki",
-            value=(
-                f"Aktywności: **{stats['total_activities']}**\n"
-                f"Dystans: **{stats['total_distance']:.1f} km**\n"
-                f"Punkty: **{stats['total_points']}**"
-            ),
-            inline=False
-        )
-        
-        embed.add_field(
-            name="👥 Aktywni uczestnicy",
-            value=f"**{stats['active_users']}** osób",
-            inline=True
-        )
-        
-        embed.set_footer(text=f"Wygenerowano: {now.strftime('%Y-%m-%d %H:%M')}")
-        
-        await interaction.followup.send(embed=embed)
-        
-    except Exception as e:
-        logger.error(f"Błąd generowania podsumowania: {e}", exc_info=True)
-        await interaction.followup.send("❌ Wystąpił błąd podczas generowania podsumowania. Spróbuj ponownie.")
+
+    embed.add_field(
+        name="📈 Łączne statystyki (top 10)",
+        value=(
+            f"Aktywności: **{total_activities}**\n"
+            f"Dystans: **{total_distance:.1f} km**\n"
+            f"Punkty: **{total_points}**"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Wygenerowano: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    await interaction.followup.send(embed=embed)
 
 
 @podsumowanie.autocomplete('okres')
@@ -734,151 +577,39 @@ async def okres_autocomplete(
     interaction: discord.Interaction,
     current: str,
 ) -> list[discord.app_commands.Choice[str]]:
-    """Autocomplete dla wyboru okresu."""
     choices = [
         discord.app_commands.Choice(name="Cały konkurs", value="caly"),
-        discord.app_commands.Choice(name="Bieżący tydzień (niedziela-dziś)", value="biezacy_tydzien"),
-        discord.app_commands.Choice(name="Ostatni tydzień (niedziela-sobota)", value="ostatni_tydzien"),
-        discord.app_commands.Choice(name="Ostatni miesiąc kalendarzowy", value="miesiac"),
+        discord.app_commands.Choice(name="Bieżący tydzień", value="biezacy_tydzien"),
+        discord.app_commands.Choice(name="Ostatni tydzień", value="ostatni_tydzien"),
+        discord.app_commands.Choice(name="Ostatni miesiąc", value="miesiac"),
     ]
     return choices
 
 
-def _calculate_period_stats(activities: list) -> dict:
-    """
-    Oblicza statystyki dla danego okresu.
-    
-    Args:
-        activities: Lista aktywności z arkusza
-        
-    Returns:
-        Słownik ze statystykami
-    """
-    from collections import defaultdict
-    
-    user_points = defaultdict(int)
-    user_activities = defaultdict(int)
-    longest_run = {'dystans': 0, 'nick': '', 'typ': ''}
-    longest_swim = {'dystans': 0, 'nick': ''}
-    total_distance = 0
-    total_points = 0
-    
-    for activity in activities:
-        nick = activity.get('Nick', 'Nieznany')
-        dystans = parse_distance(activity.get('Dystans (km)', 0))
-        punkty_str = activity.get('PUNKTY', '0')
-        punkty = safe_int(punkty_str)
-        typ = activity.get('Rodzaj Aktywności', '')
-        
-        # Suma punktów użytkownika
-        user_points[nick] += punkty
-        user_activities[nick] += 1
-        
-        # Łączne statystyki
-        total_distance += dystans
-        total_points += punkty
-        
-        # Najdłuższy bieg (Bieganie teren/bieżnia)
-        if 'bieganie' in typ.lower() and dystans > longest_run['dystans']:
-            longest_run = {'dystans': dystans, 'nick': nick, 'typ': typ}
-        
-        # Najdłuższe pływanie
-        if 'pływanie' in typ.lower() and dystans > longest_swim['dystans']:
-            longest_swim = {'dystans': dystans, 'nick': nick}
-    
-    # Top scorer
-    top_scorer_nick = max(user_points.items(), key=lambda x: x[1])[0] if user_points else ''
-    top_scorer_points = user_points[top_scorer_nick] if top_scorer_nick else 0
-    
-    return {
-        'top_scorer': {'nick': top_scorer_nick, 'punkty': top_scorer_points},
-        'longest_run': longest_run,
-        'longest_swim': longest_swim if longest_swim['dystans'] > 0 else None,
-        'total_activities': len(activities),
-        'total_distance': total_distance,
-        'total_points': total_points,
-        'active_users': len(user_points),
-        'user_points': dict(user_points),
-        'user_activities': dict(user_activities)
-    }
-
-
-async def _generate_ai_summary(stats: dict, period: str) -> str:
-    """
-    Generuje komentarz AI na podstawie statystyk.
-    
-    Args:
-        stats: Statystyki okresu
-        period: Nazwa okresu
-        
-    Returns:
-        Komentarz wygenerowany przez AI
-    """
+async def _generate_ai_summary_from_rankings(top_users, period: str) -> str:
     try:
-        # Pobierz prompt z konfiguracji
-        from bot.config_manager import config_manager
+        from .config_manager import config_manager
         provider = config_manager.get_llm_provider()
-        prompts = config_manager.get_llm_prompts(provider)
-        
-        prompt_template = prompts.get("period_summary")
-        if not prompt_template:
-            # Fallback do starego promptu jeśli nie ma w konfiguracji
-            prompt = f"""Wygeneruj krótkie, motywujące podsumowanie aktywności sportowej dla okresu: {period}
-
-STATYSTYKI:
-- Łączna liczba aktywności: {stats['total_activities']}
-- Łączny dystans: {stats['total_distance']:.1f} km
-- Łączne punkty: {stats['total_points']}
-- Liczba aktywnych uczestników: {stats['active_users']}
-- Najlepszy wynik: {stats['top_scorer']['nick']} ({stats['top_scorer']['punkty']} pkt)
-- Najdłuższy bieg: {stats['longest_run']['nick']} ({stats['longest_run']['dystans']} km, {stats['longest_run']['typ']})
-{f"- Najdłuższe pływanie: {stats['longest_swim']['nick']} ({stats['longest_swim']['dystans']} km)" if stats.get('longest_swim') else ""}
-
-WYMAGANIA:
-1. Podsumowanie powinno być krótkie (2-4 zdania)
-2. Ton entuzjastyczny i motywujący
-3. Doceniaj osiągnięcia uczestników
-4. Zwróć uwagę na ciekawe fakty (np. największy dystans, najwięcej punktów)
-5. Użyj emoji dla emocji (max 2-3)
-6. NIE używaj markdown (bez **bold**, _italic_, itp.)
-
-Wygeneruj tylko tekst podsumowania, bez dodatkowych komentarzy."""
-        else:
-            # Przygotuj tekst dla najdłuższego pływania
-            longest_swim_text = ""
-            if stats.get('longest_swim'):
-                longest_swim_text = f"- Najdłuższe pływanie: {stats['longest_swim']['nick']} ({stats['longest_swim']['dystans']} km)"
-            
-            # Wypełnij szablon promptu
-            prompt = prompt_template.format(
-                period=period,
-                total_activities=stats['total_activities'],
-                total_distance=f"{stats['total_distance']:.1f}",
-                total_points=stats['total_points'],
-                active_users=stats['active_users'],
-                top_scorer_nick=stats['top_scorer']['nick'],
-                top_scorer_points=stats['top_scorer']['punkty'],
-                longest_run_nick=stats['longest_run']['nick'],
-                longest_run_distance=stats['longest_run']['dystans'],
-                longest_run_type=stats['longest_run']['typ'],
-                longest_swim_text=longest_swim_text
-            )
-
-        # Pobierz globalny system_prompt
         system_prompt = config_manager.get_system_prompt(provider)
-        
-        response = await llm_client.generate_text(prompt, system_instruction=system_prompt)
-        
+
+        top_lines = "\n".join(
+            f"{i+1}. {u.display_name}: {u.total_points} pkt, {u.total_activities} aktywności, {u.total_distance_km:.1f} km"
+            for i, u in enumerate(top_users[:5])
+        )
+        prompt = (
+            f"Wygeneruj krótkie (2-3 zdania), motywujące podsumowanie dla okresu: {period}\n\n"
+            f"TOP UŻYTKOWNICY:\n{top_lines}\n\n"
+            "Ton entuzjastyczny, max 2 emoji, bez markdown."
+        )
+
+        response = llm_client.generate_text(prompt, system_instruction=system_prompt)
         if response:
-            # Usuń markdown formatting jeśli AI je dodało
-            response = response.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
-            return response
-        
-        return f"Świetna robota! W okresie '{period}' zrealizowano {stats['total_activities']} aktywności na łączny dystans {stats['total_distance']:.1f} km! 🎉"
-        
-    except Exception as e:
-        logger.error(f"Błąd generowania komentarza AI: {e}", exc_info=True)
-        return f"Imponujące wyniki w okresie '{period}'! Łącznie {stats['total_activities']} aktywności i {stats['total_points']} punktów! 💪"
+            return response.replace('**', '').replace('__', '').replace('*', '')
+    except Exception:
+        logger.error("Failed to generate AI summary", exc_info=True)
+
+    leader = top_users[0].display_name if top_users else "N/A"
+    return f"Świetne wyniki w {period}! Lider: {leader} 💪"
 
 
 def main():

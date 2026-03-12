@@ -23,6 +23,7 @@ class EventsManager:
             price=payload.price,
             currency=payload.currency,
             event_url=payload.event_url,
+            discord_channel_id=payload.discord_channel_id,
             created_at=now,
             updated_at=now,
         )
@@ -38,6 +39,15 @@ class EventsManager:
         query = self.db.query(AirsoftEvent)
         if upcoming_only:
             query = query.filter(AirsoftEvent.start_date >= datetime.utcnow())
+        return query.order_by(AirsoftEvent.start_date.asc()).all()
+
+    def get_active_events(self) -> list[AirsoftEvent]:
+        """Zwraca eventy aktualnie trwające (start_date <= now <= end_date lub without end_date)."""
+        now = datetime.utcnow()
+        query = self.db.query(AirsoftEvent).filter(AirsoftEvent.start_date <= now)
+        query = query.filter(
+            (AirsoftEvent.end_date == None) | (AirsoftEvent.end_date >= now)  # noqa: E711
+        )
         return query.order_by(AirsoftEvent.start_date.asc()).all()
 
     def delete_event(self, event_id: int) -> bool:

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.activity import ActivityCreate, ActivityRead, UserRankingRead
+from app.schemas.activity import ActivityCreate, ActivityRead, ActivityUpdate, UserRankingRead
+from app.schemas.activity_rule import ActivityRulePatchPayload, ActivityRulePayload, ActivityRuleRead
 from app.schemas.challenge import ChallengeCreate, ChallengeParticipantCreate, ChallengeParticipantRead, ChallengeRead
 from app.schemas.event import AirsoftEventCreate, AirsoftEventRead, EventRegistrationCreate, EventRegistrationRead
 from app.schemas.mission import MissionRead
@@ -66,6 +67,29 @@ def user_history(discord_id: str, limit: int = 20, db: Session = Depends(get_db)
     return ActivityManager(db).get_user_history(discord_id=discord_id, limit=limit)
 
 
+@router.get("/activities/{activity_iid}", response_model=ActivityRead)
+def get_activity(activity_iid: str, db: Session = Depends(get_db)) -> ActivityRead:
+    activity = ActivityManager(db).get_activity_by_iid(activity_iid)
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return activity
+
+
+@router.patch("/activities/{activity_iid}", response_model=ActivityRead)
+def update_activity(activity_iid: str, payload: ActivityUpdate, db: Session = Depends(get_db)) -> ActivityRead:
+    update_fields = payload.model_dump(exclude_unset=True)
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields provided for update")
+
+    try:
+        return ActivityManager(db).update_activity(activity_iid, **update_fields)
+    except ValueError as exc:
+        detail = str(exc)
+        if "not found" in detail.lower():
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+
 @router.get("/rankings", response_model=list[UserRankingRead])
 def rankings(limit: int = 10, db: Session = Depends(get_db)) -> list[UserRankingRead]:
     return [UserRankingRead(**row) for row in ActivityManager(db).get_rankings(limit=limit)]
@@ -79,6 +103,11 @@ def active_missions(db: Session = Depends(get_db)) -> list[MissionRead]:
 
 
 # ── Events ─────────────────────────────────────────────────────────────────
+
+@router.get("/events/active", response_model=list[AirsoftEventRead])
+def list_active_events(db: Session = Depends(get_db)) -> list[AirsoftEventRead]:
+    return EventsManager(db).get_active_events()
+
 
 @router.post("/events", response_model=AirsoftEventRead)
 def create_event(payload: AirsoftEventCreate, db: Session = Depends(get_db)) -> AirsoftEventRead:
@@ -132,6 +161,11 @@ def user_event_registrations(discord_id: str, db: Session = Depends(get_db)) -> 
 
 # ── Challenges ─────────────────────────────────────────────────────────────
 
+@router.get("/challenges/active", response_model=list[ChallengeRead])
+def list_active_challenges(db: Session = Depends(get_db)) -> list[ChallengeRead]:
+    return ChallengesManager(db).get_active_challenges()
+
+
 @router.post("/challenges", response_model=ChallengeRead)
 def create_challenge(payload: ChallengeCreate, db: Session = Depends(get_db)) -> ChallengeRead:
     return ChallengesManager(db).create_challenge(payload)
@@ -140,6 +174,60 @@ def create_challenge(payload: ChallengeCreate, db: Session = Depends(get_db)) ->
 @router.get("/challenges", response_model=list[ChallengeRead])
 def list_challenges(active_only: bool = False, db: Session = Depends(get_db)) -> list[ChallengeRead]:
     return ChallengesManager(db).list_challenges(active_only=active_only)
+
+
+@router.get("/challenges/{challenge_id}/activity-rules", response_model=list[ActivityRuleRead])
+def get_challenge_activity_rules(challenge_id: int, db: Session = Depends(get_db)) -> list[ActivityRuleRead]:
+    manager = ChallengesManager(db)
+    challenge = manager.get_challenge(challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+    return manager.list_activity_rules(challenge_id)
+
+
+@router.post("/challenges/{challenge_id}/activity-rules", response_model=list[ActivityRuleRead])
+def create_challenge_activity_rules(
+    challenge_id: int,
+    payload: list[ActivityRulePayload] | None = Body(default=None),
+    db: Session = Depends(get_db),
+) -> list[ActivityRuleRead]:
+    try:
+        return ChallengesManager(db).create_activity_rules(challenge_id, payload)
+    except ValueError as exc:
+        detail = str(exc)
+        if "not found" in detail:
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=409, detail=detail) from exc
+
+
+@router.put("/challenges/{challenge_id}/activity-rules", response_model=list[ActivityRuleRead])
+def replace_challenge_activity_rules(
+    challenge_id: int,
+    payload: list[ActivityRulePayload] | None = Body(default=None),
+    db: Session = Depends(get_db),
+) -> list[ActivityRuleRead]:
+    try:
+        return ChallengesManager(db).replace_activity_rules(challenge_id, payload)
+    except ValueError as exc:
+        detail = str(exc)
+        if "not found" in detail:
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+
+@router.patch("/challenges/{challenge_id}/activity-rules", response_model=list[ActivityRuleRead])
+def patch_challenge_activity_rules(
+    challenge_id: int,
+    payload: list[ActivityRulePatchPayload] = Body(...),
+    db: Session = Depends(get_db),
+) -> list[ActivityRuleRead]:
+    try:
+        return ChallengesManager(db).patch_activity_rules(challenge_id, payload)
+    except ValueError as exc:
+        detail = str(exc)
+        if "not found" in detail:
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 @router.get("/challenges/{challenge_id}", response_model=ChallengeRead)

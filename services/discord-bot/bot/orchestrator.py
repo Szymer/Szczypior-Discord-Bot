@@ -4,18 +4,21 @@ import json
 import logging
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import discord
 
-from .config_manager import config_manager
-from .constants import ACTIVITY_TYPES
-from .exceptions import (
+from api_menager import APIManager, APIManagerError, APIManagerHTTPError
+from config_manager import config_manager
+from constants import ACTIVITY_TYPES
+from exceptions import (
     ConfigurationError,
     LLMAnalysisError,
     LLMTimeoutError,
 )
-from .utils import get_display_name, parse_distance
+from libs.shared.schemas.challenge import ChallengeRead
+from utils import get_display_name, parse_distance
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +26,80 @@ logger = logging.getLogger(__name__)
 class BotOrchestrator:
     """Orkiestruje logikę biznesową bota."""
 
-    def __init__(self, bot, gemini_client, sheets_manager):
+    def __init__(self, bot, gemini_client, api_manager: APIManager):
         self.bot = bot
         self.gemini_client = gemini_client
-        self.sheets_manager = sheets_manager
+        self.api_manager = api_manager
+        # kept for backward-compat with sync_chat_history (not called in normal flow)
+        self.sheets_manager = None
         self.activity_keywords = config_manager.get_activity_keywords()
+        # Cache: challenge_id -> activity types dict (same shape as ACTIVITY_TYPES)
+        self._rules_cache: dict[int, dict[str, Any]] = {}
+        # Startup sync tunables: keep cache bounded to avoid memory spikes.
+        self._startup_sync_user_history_limit = max(
+            50,
+            int(os.getenv("STARTUP_SYNC_USER_HISTORY_LIMIT", "500")),
+        )
+        self._startup_sync_max_user_iid_cache = max(
+            50,
+            int(os.getenv("STARTUP_SYNC_MAX_USER_IID_CACHE", "1000")),
+        )
+
+    def _get_activity_types(
+        self,
+        channel_id: Optional[str] = None,
+        challenge_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Zwraca słownik reguł aktywności dla danego challenge'u.
+        Kolejność rozwiązywania:
+          1. challenge_id podane wprost
+          2. challenge_id z globalnej mapy channel_to_challenge (via channel_id)
+          3. Fallback na stałą ACTIVITY_TYPES
+        Wyniki są cachowane per challenge_id.
+        """
+        if challenge_id is None and channel_id:
+            try:
+                from bot.main import channel_to_challenge as _ch_map
+                challenge_id = _ch_map.get(channel_id)
+            except ImportError:
+                pass
+
+        if challenge_id is None:
+            return ACTIVITY_TYPES
+
+        if challenge_id in self._rules_cache:
+            return self._rules_cache[challenge_id]
+
+        if self.api_manager:
+            try:
+                rules = self.api_manager.get_activity_rules(challenge_id)
+                rules_dict = {
+                    r.activity_type: {
+                        "emoji": r.emoji,
+                        "base_points": r.base_points,
+                        "unit": r.unit,
+                        "min_distance": float(r.min_distance),
+                        "bonuses": r.bonuses,
+                        "display_name": r.display_name,
+                    }
+                    for r in rules
+                }
+                if rules_dict:
+                    self._rules_cache[challenge_id] = rules_dict
+                    logger.info(
+                        "Loaded activity rules from API",
+                        extra={"challenge_id": challenge_id, "rule_count": len(rules_dict)},
+                    )
+                    return rules_dict
+            except Exception:
+                logger.warning(
+                    "Failed to fetch activity rules from API, using defaults",
+                    exc_info=True,
+                    extra={"challenge_id": challenge_id},
+                )
+
+        return ACTIVITY_TYPES
 
     def _create_unique_id(self, message: discord.Message) -> str:
         """
@@ -135,7 +207,7 @@ class BotOrchestrator:
         self,
         text: Optional[str] = None,
         image_url: Optional[str] = None,
-        user_history: Optional[List[Dict[str, Any]]] = None
+        user_history: Optional[List[Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Unified method for analyzing content (text and/or image) for activity data.
@@ -174,9 +246,29 @@ class BotOrchestrator:
         # Format user history for context
         user_history_text = "Brak wcześniejszych aktywności."
         if user_history:
+            def _history_value(activity: Any, key: str, default: Any = None) -> Any:
+                """Supports legacy dict rows and ActivityRead objects from API client."""
+                if isinstance(activity, dict):
+                    return activity.get(key, default)
+
+                key_to_attr = {
+                    "Data": "created_at",
+                    "Rodzaj Aktywności": "activity_type",
+                    "Dystans (km)": "distance_km",
+                    "PUNKTY": "total_points",
+                }
+                attr_name = key_to_attr.get(key)
+                if not attr_name:
+                    return default
+
+                value = getattr(activity, attr_name, default)
+                if key == "Data" and value and hasattr(value, "strftime"):
+                    return value.strftime("%Y-%m-%d")
+                return value
+
             history_lines = [
-                f"- {act.get('Data', 'N/A')}: {act.get('Rodzaj Aktywności', 'N/A')} "
-                f"{parse_distance(act.get('Dystans (km)', 0))}km, {act.get('PUNKTY', '0')} pkt"
+                f"- {_history_value(act, 'Data', 'N/A')}: {_history_value(act, 'Rodzaj Aktywności', 'N/A')} "
+                f"{parse_distance(_history_value(act, 'Dystans (km)', 0))}km, {_history_value(act, 'PUNKTY', '0')} pkt"
                 for act in user_history[-5:]  # Last 5 activities
             ]
             user_history_text = "\n".join(history_lines)
@@ -295,7 +387,7 @@ class BotOrchestrator:
 
     def _activity_already_exists(self, message: discord.Message) -> bool:
         """
-        Sprawdza czy aktywność z danej wiadomości już istnieje w arkuszu na podstawie IID.
+        Sprawdza czy aktywność z danej wiadomości już istnieje w bazie na podstawie IID.
 
         Args:
             message: Wiadomość Discord
@@ -303,22 +395,303 @@ class BotOrchestrator:
         Returns:
             True jeśli aktywność już istnieje (duplikat), False jeśli można dodać
         """
-        if not self.sheets_manager:
+        if not self.api_manager:
             return False
 
-        # Tworzymy IID konsekwentnie: {timestamp_int}_{message_id}
-        message_id = str(message.id)
-        message_timestamp = str(int(message.created_at.timestamp()))
-        iid = f"{message_timestamp}_{message_id}"
-
-        exists = self.sheets_manager.activity_exists(message_id, message_timestamp)
-
-        if exists:
+        iid = self._create_unique_id(message)
+        try:
+            self.api_manager.get_activity(iid)
             logger.debug("Duplicate activity detected", extra={"iid": iid})
+            return True
+        except APIManagerHTTPError as exc:
+            if exc.status_code == 404:
+                return False
+            logger.warning("API error checking duplicate", extra={"iid": iid, "error": str(exc)})
+            return False
+        except APIManagerError:
+            logger.warning("Connection error checking duplicate", extra={"iid": iid}, exc_info=True)
+            return False
 
-        return exists
+    def _activity_exists_by_iid(self, iid: str) -> bool:
+        """Sprawdza istnienie aktywności po IID bez potrzeby trzymania całej wiadomości."""
+        if not self.api_manager:
+            return False
 
-    async def handle_message(self, message: discord.Message):
+        try:
+            self.api_manager.get_activity(iid)
+            logger.debug("Duplicate activity detected during startup sync", extra={"iid": iid})
+            return True
+        except APIManagerHTTPError as exc:
+            if exc.status_code == 404:
+                return False
+            logger.warning("API error checking duplicate", extra={"iid": iid, "error": str(exc)})
+            return False
+        except APIManagerError:
+            logger.warning("Connection error checking duplicate", extra={"iid": iid}, exc_info=True)
+            return False
+
+    @staticmethod
+    def _normalize_datetime_for_discord(value: datetime) -> datetime:
+        """Normalizuje datę do UTC, aby można było bezpiecznie użyć jej w Discord history()."""
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    def _is_sync_candidate_message(self, message: discord.Message) -> bool:
+        """Lekki filtr wiadomości przed dodaniem do kolejki startup sync."""
+        if message.author == self.bot.user:
+            return False
+
+        if message.content.startswith("!"):
+            return False
+
+        if message.type.value == 19:
+            return False
+
+        has_activity_keywords = (
+            self._detect_activity_type_from_text(message.content) if message.content else None
+        )
+        has_image = self._is_message_eligible_for_analysis(message)
+        return bool(has_activity_keywords or has_image)
+
+    async def _resolve_sync_channel(self, channel_id: str) -> Optional[discord.abc.Messageable]:
+        """Pobiera kanał challenge'u i sprawdza minimalne uprawnienia do odczytu historii."""
+        try:
+            channel = self.bot.get_channel(int(channel_id))
+            if not channel:
+                channel = await self.bot.fetch_channel(int(channel_id))
+        except discord.errors.Forbidden:
+            logger.error(
+                "Bot does not have access to the challenge channel",
+                extra={
+                    "channel_id": channel_id,
+                    "required_permissions": "View Channel, Read Message History",
+                },
+            )
+            return None
+        except discord.errors.NotFound:
+            logger.error("Challenge channel not found", extra={"channel_id": channel_id})
+            return None
+        except Exception:
+            logger.error(
+                "Failed to fetch challenge channel",
+                exc_info=True,
+                extra={"channel_id": channel_id},
+            )
+            return None
+
+        if hasattr(channel, "permissions_for") and getattr(channel, "guild", None) is not None:
+            me = getattr(channel.guild, "me", None)
+            if me is not None:
+                permissions = channel.permissions_for(me)
+                if not permissions.view_channel or not permissions.read_message_history:
+                    logger.error(
+                        "Bot lacks required permissions in challenge channel",
+                        extra={
+                            "channel": getattr(channel, "name", channel_id),
+                            "view_channel": permissions.view_channel,
+                            "read_message_history": permissions.read_message_history,
+                        },
+                    )
+                    return None
+
+        return channel
+
+    def _build_user_challenge_iid_cache(self, discord_id: str, challenge_id: int) -> set[str]:
+        """Pobiera historię użytkownika i buduje ograniczony cache IID dla danego challenge'u."""
+        if not self.api_manager:
+            return set()
+
+        try:
+            activities = self.api_manager.get_user_activities(
+                discord_id,
+                limit=self._startup_sync_user_history_limit,
+            )
+        except APIManagerError:
+            logger.warning(
+                "Could not fetch user history during startup sync",
+                exc_info=True,
+                extra={"discord_id": discord_id, "challenge_id": challenge_id},
+            )
+            return set()
+
+        filtered = [act for act in activities if act.challenge_id == challenge_id]
+        if len(filtered) > self._startup_sync_max_user_iid_cache:
+            filtered.sort(key=lambda act: act.created_at, reverse=True)
+            filtered = filtered[: self._startup_sync_max_user_iid_cache]
+            logger.info(
+                "Startup sync user IID cache capped",
+                extra={
+                    "discord_id": discord_id,
+                    "challenge_id": challenge_id,
+                    "cache_size": len(filtered),
+                    "max_cache_size": self._startup_sync_max_user_iid_cache,
+                },
+            )
+
+        return {act.iid for act in filtered}
+
+    async def _sync_single_challenge(self, challenge: ChallengeRead) -> dict[str, int]:
+        """Synchronizuje backlog jednego challenge'u w zakresie jego czasu trwania."""
+        summary = {
+            "scanned": 0,
+            "queued": 0,
+            "duplicates": 0,
+            "processed": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
+
+        if not challenge.discord_channel_id:
+            logger.info("Skipping startup sync for challenge without channel", extra={"challenge_id": challenge.id})
+            return summary
+
+        channel = await self._resolve_sync_channel(challenge.discord_channel_id)
+        if channel is None:
+            summary["skipped"] += 1
+            return summary
+
+        start_at = self._normalize_datetime_for_discord(challenge.start_date) - timedelta(seconds=1)
+        end_at = self._normalize_datetime_for_discord(challenge.end_date) + timedelta(seconds=1)
+
+        user_order: list[str] = []
+        messages_by_user: dict[str, list[tuple[int, str]]] = {}
+
+        logger.info(
+            "Scanning challenge channel backlog",
+            extra={
+                "challenge_id": challenge.id,
+                "channel_id": challenge.discord_channel_id,
+                "start_at": start_at.isoformat(),
+                "end_at": end_at.isoformat(),
+            },
+        )
+
+        async for message in channel.history(limit=None, after=start_at, before=end_at, oldest_first=True):
+            summary["scanned"] += 1
+
+            if not self._is_sync_candidate_message(message):
+                continue
+
+            iid = self._create_unique_id(message)
+            author_id = str(message.author.id)
+            if author_id not in messages_by_user:
+                messages_by_user[author_id] = []
+                user_order.append(author_id)
+
+            messages_by_user[author_id].append((message.id, iid))
+            summary["queued"] += 1
+
+        logger.info(
+            "Challenge backlog scan complete",
+            extra={
+                "challenge_id": challenge.id,
+                "channel_id": challenge.discord_channel_id,
+                "scanned": summary["scanned"],
+                "queued": summary["queued"],
+                "users": len(user_order),
+            },
+        )
+
+        for author_id in user_order:
+            user_messages = messages_by_user.get(author_id, [])
+            if not user_messages:
+                continue
+
+            existing_iids = self._build_user_challenge_iid_cache(author_id, challenge.id)
+
+            logger.info(
+                "Startup sync processing user backlog",
+                extra={
+                    "challenge_id": challenge.id,
+                    "author_id": author_id,
+                    "candidate_messages": len(user_messages),
+                    "cached_iids": len(existing_iids),
+                },
+            )
+
+            for message_id, iid in user_messages:
+                if iid in existing_iids:
+                    summary["duplicates"] += 1
+                    continue
+
+                try:
+                    message = await channel.fetch_message(message_id)
+                except discord.errors.NotFound:
+                    summary["skipped"] += 1
+                    logger.warning(
+                        "Queued startup sync message disappeared before fetch",
+                        extra={"challenge_id": challenge.id, "message_id": message_id},
+                    )
+                    continue
+                except discord.errors.Forbidden:
+                    summary["failed"] += 1
+                    logger.error(
+                        "Bot lost access while fetching queued startup sync message",
+                        extra={"challenge_id": challenge.id, "message_id": message_id},
+                    )
+                    continue
+                except Exception:
+                    summary["failed"] += 1
+                    logger.error(
+                        "Failed to fetch queued startup sync message",
+                        exc_info=True,
+                        extra={"challenge_id": challenge.id, "message_id": message_id},
+                    )
+                    continue
+
+                try:
+                    await self.handle_message(message, quiet_mode=True)
+                    summary["processed"] += 1
+                    existing_iids.add(iid)
+                except Exception:
+                    summary["failed"] += 1
+                    logger.error(
+                        "Failed to process queued startup sync message",
+                        exc_info=True,
+                        extra={"challenge_id": challenge.id, "message_id": message_id},
+                    )
+
+            # Drop per-user buffers eagerly to keep startup sync memory usage low.
+            messages_by_user.pop(author_id, None)
+
+        return summary
+
+    async def sync_active_challenges(self, challenges: list[ChallengeRead]) -> dict[str, int]:
+        """Synchronizuje backlog wszystkich aktywnych challenge'y przy starcie bota."""
+        summary = {
+            "challenge_count": len(challenges),
+            "scanned": 0,
+            "queued": 0,
+            "duplicates": 0,
+            "processed": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
+
+        if not self.api_manager:
+            logger.warning("Startup sync skipped: api_manager not available")
+            return summary
+
+        if not self.gemini_client:
+            logger.warning("Startup sync skipped: llm client not available")
+            return summary
+
+        if not challenges:
+            logger.info("Startup sync skipped: no active challenges")
+            return summary
+
+        logger.info("Starting startup sync for active challenges", extra={"challenge_count": len(challenges)})
+
+        for challenge in challenges:
+            challenge_summary = await self._sync_single_challenge(challenge)
+            for key in ("scanned", "queued", "duplicates", "processed", "failed", "skipped"):
+                summary[key] += challenge_summary[key]
+
+        logger.info("Startup sync completed", extra=summary)
+        return summary
+
+    async def handle_message(self, message: discord.Message, quiet_mode: bool = False):
         """Przetwarza wiadomość i decyduje o podjęciu akcji."""
         # Loguj ID wiadomości na początku przetwarzania
         logger.info(
@@ -348,8 +721,8 @@ class BotOrchestrator:
                 "Skipping duplicate message",
                 extra={"message_id": message.id, "author": str(message.author)}
             )
-            # Dodaj cichą reakcję jeśli jeszcze nie ma
-            if not any(r.emoji == "✅" for r in message.reactions):
+            # W live mode dodaj cichą reakcję jeśli jeszcze nie ma.
+            if (not quiet_mode) and (not any(r.emoji == "✅" for r in message.reactions)):
                 await message.add_reaction("✅")
             return
 
@@ -368,15 +741,20 @@ class BotOrchestrator:
             }
         )
         
-        await message.add_reaction("🤔")
+        if not quiet_mode:
+            await message.add_reaction("🤔")
 
         try:
-            # Get user history for context
+            # Get user history for context from API
             user_history = []
-            if self.sheets_manager:
-                display_name = get_display_name(message.author)
-                user_history = await self.sheets_manager.get_user_history(display_name)
-            
+            if self.api_manager:
+                try:
+                    user_history = self.api_manager.get_user_activities(
+                        str(message.author.id), limit=5
+                    )
+                except APIManagerError:
+                    logger.warning("Could not fetch user history from API", exc_info=True)
+
             # Get image URL if present
             image_url = self._get_image_url(message) if has_image else None
             
@@ -388,11 +766,12 @@ class BotOrchestrator:
             )
 
             if not analysis:
-                await message.remove_reaction("🤔", self.bot.user)
-                await message.add_reaction("❓")
+                if not quiet_mode:
+                    await message.remove_reaction("🤔", self.bot.user)
+                    await message.add_reaction("❓")
                 return
 
-            await self._process_successful_analysis(message, analysis)
+            await self._process_successful_analysis(message, analysis, quiet_mode=quiet_mode)
             
         except Exception:
             logger.error(
@@ -400,8 +779,9 @@ class BotOrchestrator:
                 extra={"message_id": message.id},
                 exc_info=True
             )
-            await message.remove_reaction("🤔", self.bot.user)
-            await message.add_reaction("❓")
+            if not quiet_mode:
+                await message.remove_reaction("🤔", self.bot.user)
+                await message.add_reaction("❓")
 
     def _is_message_eligible_for_analysis(self, message: discord.Message) -> bool:
         """Sprawdza, czy wiadomość powinna być analizowana."""
@@ -431,7 +811,7 @@ class BotOrchestrator:
         return None
 
     async def _process_successful_analysis(
-        self, message: discord.Message, analysis: Dict[str, Any]
+        self, message: discord.Message, analysis: Dict[str, Any], quiet_mode: bool = False
     ):
         """Obsługuje logikę po pomyślnej analizie obrazu."""
         activity_type = analysis["typ_aktywnosci"]
@@ -448,109 +828,101 @@ class BotOrchestrator:
         )
 
         # Walidacja - sprawdź czy typ aktywności istnieje i czy spełnia minimalne wymagania
-        if activity_type not in ACTIVITY_TYPES:
-            await message.remove_reaction("🤔", self.bot.user)
+        activity_types = self._get_activity_types(channel_id=str(message.channel.id))
+        if activity_type not in activity_types:
+            if not quiet_mode:
+                await message.remove_reaction("🤔", self.bot.user)
             logger.warning("Unknown activity type", extra={"activity_type": activity_type})
             return
 
         # Sprawdź minimalny dystans (dla walidacji przed zapisem)
-        activity_info = ACTIVITY_TYPES[activity_type]
+        activity_info = activity_types[activity_type]
         min_distance = activity_info.get("min_distance", 0)
         if distance < min_distance:
-            await message.remove_reaction("🤔", self.bot.user)
+            if not quiet_mode:
+                await message.remove_reaction("🤔", self.bot.user)
             logger.info(
                 "Distance below minimum",
                 extra={"distance": distance, "min_distance": min_distance}
             )
             return
 
-        await message.remove_reaction("🤔", self.bot.user)
+        if not quiet_mode:
+            await message.remove_reaction("🤔", self.bot.user)
 
-        # Zapis do arkusza - arkusz obliczy punkty
-        saved, row_number = await self._save_activity_to_sheets(message, analysis)
-        
-        if not saved or row_number == 0:
+        # Zapis do API
+        saved_activity = await self._save_activity_to_api(message, analysis, channel_id=str(message.channel.id))
+
+        if not saved_activity:
             logger.error("Failed to save activity", extra={"discord_msg_id": message.id})
-            # Wysłanie komunikatu o błędzie
-            embed = discord.Embed(
-                title="❌ Błąd zapisu",
-                description="Nie udało się zapisać aktywności do arkusza.",
-                color=discord.Color.red()
-            )
-            await message.reply(embed=embed)
+            if not quiet_mode:
+                embed = discord.Embed(
+                    title="❌ Błąd zapisu",
+                    description="Nie udało się zapisać aktywności do bazy danych.",
+                    color=discord.Color.red()
+                )
+                await message.reply(embed=embed)
             return
-        
-        # Pobierz punkty z arkusza (obliczone przez formułę)
-        points = await self.sheets_manager.get_points_from_row(row_number)
-        
-        if points is None or points == 0:
-            logger.warning(
-                "No points calculated by sheet",
-                extra={"discord_msg_id": message.id, "row": row_number}
-            )
-            # Jeśli arkusz zwrócił 0 punktów, nie pokazuj aktywności
-            embed = discord.Embed(
-                title="⚠️ Aktywność nie spełnia wymagań",
-                description="Aktywność została zapisana, ale nie uzyskano punktów (prawdopodobnie dystans poniżej minimum).",
-                color=discord.Color.orange()
-            )
-            await message.reply(embed=embed)
+
+        points = saved_activity.total_points
+
+        if points == 0:
+            if not quiet_mode:
+                embed = discord.Embed(
+                    title="⚠️ Aktywność nie spełnia wymagań",
+                    description="Aktywność została zapisana, ale nie uzyskała punktów (dystans poniżej minimum).",
+                    color=discord.Color.orange()
+                )
+                await message.reply(embed=embed)
             return
 
         logger.info(
-            "Activity saved to Sheets with points",
-            extra={"discord_msg_id": message.id, "points": points, "row": row_number}
+            "Activity saved to API with points",
+            extra={"discord_msg_id": message.id, "points": points, "iid": saved_activity.iid}
         )
 
-        # Generowanie komentarza (z punktami z arkusza)
+        if quiet_mode:
+            return
+
+        # Generowanie komentarza motywacyjnego
         ai_comment = await self._generate_motivational_comment(
             message.author, activity_type, distance, points
         )
 
         # Wysyłanie odpowiedzi
-        embed = self._create_response_embed(message, analysis, points, ai_comment, True)
+        embed = self._create_response_embed(message, analysis, points, ai_comment, True, iid=saved_activity.iid)
         await message.reply(embed=embed)
         await message.add_reaction("✅")
 
     async def _generate_motivational_comment(
         self, author: discord.User, activity_type: str, distance: float, points: int
     ) -> str:
-        """Pobiera historię, buduje prompt i generuje komentarz motywacyjny."""
-        user_history = []
+        """Pobiera historię z API, buduje prompt i generuje komentarz motywacyjny."""
         display_name = get_display_name(author)
-        
-        logger.info(
-            "🔍 DEBUG: Starting motivational comment generation",
-            extra={
-                "user": display_name,
-                "activity_type": activity_type,
-                "distance": distance,
-                "points": points
-            }
-        )
-        
-        if self.sheets_manager:
+        user_history_api = []
+
+        if self.api_manager:
             try:
-                user_history = await self.sheets_manager.get_user_history(display_name)
-                logger.info(
-                    "🔍 DEBUG: User history fetched",
-                    extra={
-                        "user": display_name,
-                        "history_count": len(user_history),
-                        "history_sample": user_history[:2] if user_history else "empty"
-                    }
+                user_history_api = self.api_manager.get_user_activities(
+                    str(author.id), limit=5
                 )
-            except Exception:
+            except APIManagerError:
                 logger.warning(
                     "Failed to fetch user history for motivational comment",
                     exc_info=True,
                     extra={"user": display_name},
                 )
-        else:
-            logger.warning(
-                "🔍 DEBUG: sheets_manager is None - no history available",
-                extra={"user": display_name}
-            )
+
+        # Convert ActivityRead list to legacy dict format expected by _build_motivational_comment_prompt
+        user_history = [
+            {
+                "Data": act.created_at.strftime("%Y-%m-%d"),
+                "Rodzaj Aktywności": act.activity_type,
+                "Dystans (km)": act.distance_km,
+                "PUNKTY": act.total_points,
+            }
+            for act in user_history_api
+        ]
 
         current_activity_summary = {
             "typ_aktywnosci": activity_type,
@@ -575,74 +947,107 @@ class BotOrchestrator:
             logger.error("Failed to generate AI comment", exc_info=True)
             return "Dobra robota!"  # Fallback
 
-    async def _save_activity_to_sheets(
-        self, message: discord.Message, analysis: Dict[str, Any]
-    ) -> tuple[bool, int]:
+    async def _save_activity_to_api(
+        self, message: discord.Message, analysis: Dict[str, Any], channel_id: Optional[str] = None
+    ):
         """
-        Zapisuje aktywność do Google Sheets.
-
-        Args:
-            message: Wiadomość Discord
-            analysis: Analiza aktywności
+        Zapisuje aktywność do db-service przez API.
 
         Returns:
-            Tuple (success: bool, row_number: int) - True i numer wiersza jeśli sukces, (False, 0) w przeciwnym razie
+            ActivityRead jeśli sukces, None w przypadku błędu
         """
-        # Tryb DEBUG - nie zapisuj do arkusza
+        from datetime import datetime as _dt
+        from libs.shared.schemas.activity import ActivityCreate
+
         if config_manager.is_debug_mode():
             logger.warning(
-                "🔍 DEBUG MODE: Skipping save to Google Sheets",
+                "🔍 DEBUG MODE: Skipping save to API",
                 extra={"message_id": message.id, "analysis": analysis}
             )
-            # Zwróć fake success z row_number=999 dla celów testowych
-            return (True, 999)
-        
-        if not self.sheets_manager:
-            return (False, 0)
+            return None
+
+        if not self.api_manager:
+            return None
+
+        # Sprawdź challenge_id z globalnej mapy kanał -> challenge
+        challenge_id: Optional[int] = None
+        if channel_id:
+            try:
+                from bot.main import channel_to_challenge as _ch_map
+                challenge_id = _ch_map.get(channel_id)
+            except ImportError:
+                pass
+
         try:
-            timestamp = message.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            activity_type = analysis["typ_aktywnosci"]
+            distance = float(analysis["dystans"])
+            weight_kg = float(analysis.get("obciazenie") or 0) or None
+            elevation_raw = analysis.get("przewyzszenie")
+            elevation_m = int(float(elevation_raw)) if elevation_raw else None
 
-            # Określ czy jest obciążenie > 5kg
-            weight_value = float(analysis.get("obciazenie") or 0)
-            has_weight = weight_value > 5
+            # Oblicz punkty lokalnie
+            total_points, _ = self.calculate_points(
+                activity_type, distance, weight=weight_kg, elevation=elevation_m,
+                challenge_id=challenge_id,
+            )
+            activity_info = self._get_activity_types(challenge_id=challenge_id).get(
+                activity_type, ACTIVITY_TYPES.get(activity_type, {})
+            )
+            base_pts = int(distance * activity_info["base_points"])
+            weight_bonus = total_points - base_pts  # uproszczone
+            if weight_kg and weight_kg > 0 and "obciążenie" in activity_info.get("bonuses", []):
+                weight_bonus = int((weight_kg / 5) * (distance * activity_info["base_points"] * 0.1))
+            else:
+                weight_bonus = 0
+            elevation_bonus = 0
+            if elevation_m and elevation_m > 0 and "przewyższenie" in activity_info.get("bonuses", []):
+                elevation_bonus = int((elevation_m / 100) * (distance * activity_info["base_points"] * 0.05))
 
-            # Użyj get_display_name z utils
+            iid = self._create_unique_id(message)
             display_name = get_display_name(message.author)
 
-            # Loguj wszystkie dane przed zapisem
+            payload = ActivityCreate(
+                discord_id=str(message.author.id),
+                display_name=display_name,
+                iid=iid,
+                activity_type=activity_type,
+                distance_km=distance,
+                base_points=base_pts,
+                weight_kg=weight_kg,
+                elevation_m=elevation_m,
+                weight_bonus_points=weight_bonus,
+                elevation_bonus_points=elevation_bonus,
+                mission_bonus_points=0,
+                total_points=total_points,
+                time_minutes=int(analysis["czas"]) if analysis.get("czas") else None,
+                pace=analysis.get("tempo"),
+                heart_rate_avg=int(analysis["puls_sredni"]) if analysis.get("puls_sredni") else None,
+                calories=int(analysis["kalorie"]) if analysis.get("kalorie") else None,
+                created_at=message.created_at.replace(tzinfo=None),
+                message_id=str(message.id),
+                message_timestamp=str(int(message.created_at.timestamp())),
+                challenge_id=challenge_id,
+            )
+
             logger.info(
-                "Saving activity data",
+                "Saving activity to API",
                 extra={
                     "discord_msg_id": message.id,
                     "user": display_name,
-                    "activity_type": analysis["typ_aktywnosci"],
-                    "distance_km": float(analysis["dystans"]),
-                    "weight_kg": weight_value,
-                    "has_weight": has_weight,
-                    "elevation_m": float(analysis.get("przewyzszenie") or 0),
-                    "time": analysis.get("czas"),
-                    "pace": analysis.get("tempo"),
-                    "calories": analysis.get("kalorie"),
-                    "heart_rate": analysis.get("puls_sredni"),
-                    "timestamp": timestamp
+                    "activity_type": activity_type,
+                    "distance_km": distance,
+                    "total_points": total_points,
                 }
             )
 
-            return await self.sheets_manager.add_activity(
-                username=display_name,
-                activity_type=analysis["typ_aktywnosci"],
-                distance=float(analysis["dystans"]),
-                has_weight=has_weight,
-                elevation=float(analysis.get("przewyzszenie") or 0) if analysis.get("przewyzszenie") else None,
-                timestamp=timestamp,
-                message_id=str(message.id),
-                message_timestamp=str(int(message.created_at.timestamp())),
-            )
+            return self.api_manager.save_activity(payload)
+
+        except (APIManagerHTTPError, APIManagerError):
+            logger.error("Failed to save activity to API", exc_info=True)
+            return None
         except Exception:
-            logger.error(
-                "Failed to save activity to Sheets", exc_info=True, extra={"user": display_name}
-            )
-            return (False, 0)
+            logger.error("Unexpected error saving activity", exc_info=True)
+            return None
 
     def _create_response_embed(
         self,
@@ -651,10 +1056,12 @@ class BotOrchestrator:
         points: int,
         ai_comment: str,
         saved: bool,
+        iid: Optional[str] = None,
     ) -> discord.Embed:
         """Tworzy embed z odpowiedzią dla użytkownika."""
         activity_type = analysis["typ_aktywnosci"]
-        info = ACTIVITY_TYPES[activity_type]
+        _fallback = {"emoji": "📝", "display_name": activity_type, "unit": "km"}
+        info = self._get_activity_types(channel_id=str(message.channel.id)).get(activity_type, _fallback)
         embed = discord.Embed(
             title=f"{info['emoji']} Automatycznie rozpoznano aktywność!",
             color=discord.Color.green() if saved else discord.Color.orange(),
@@ -685,8 +1092,11 @@ class BotOrchestrator:
         if ai_comment:
             embed.add_field(name="💬 Komentarz", value=ai_comment, inline=False)
 
+        footer_text = f"IID: {iid}" if iid else ""
         if not saved:
-            embed.set_footer(text="⚠️ Dane nie zostały zapisane do Google Sheets")
+            footer_text = (footer_text + " | " if footer_text else "") + "⚠️ Dane nie zostały zapisane"
+        if footer_text:
+            embed.set_footer(text=footer_text)
 
         return embed
 
@@ -696,12 +1106,14 @@ class BotOrchestrator:
         distance: float,
         weight: Optional[float] = None,
         elevation: Optional[float] = None,
+        challenge_id: Optional[int] = None,
     ) -> tuple[int, str]:
         """Oblicza punkty za aktywność zgodnie z wytycznymi konkursu."""
-        if activity_type not in ACTIVITY_TYPES:
+        activity_types = self._get_activity_types(challenge_id=challenge_id)
+        if activity_type not in activity_types:
             return 0, f"Nieznany typ aktywności: {activity_type}"
 
-        activity_info = ACTIVITY_TYPES[activity_type]
+        activity_info = activity_types[activity_type]
 
         min_distance = activity_info.get("min_distance", 0)
         if distance < min_distance:

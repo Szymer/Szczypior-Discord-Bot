@@ -192,6 +192,26 @@ class ConfigManager:
         """
         return os.getenv("DEBUG_MODE", "false").lower() == "true"
 
+    def get_db_service_base_url(self) -> str:
+        """
+        Zwraca bazowy URL db-service.
+
+        Priorytet:
+        1) DB_SERVICE_BASE_URL (env)
+        2) API_URL (env, dla zgodności z docker-compose)
+        3) config.json -> db_service.base_url
+        4) domyślnie http://localhost:8000
+        """
+        env_url = os.getenv("DB_SERVICE_BASE_URL") or os.getenv("API_URL")
+        if env_url:
+            return env_url.rstrip("/")
+
+        config_url = self.config.get("db_service", {}).get("base_url")
+        if isinstance(config_url, str) and config_url.strip():
+            return config_url.rstrip("/")
+
+        return "http://localhost:8000"
+
 
 # Utworzenie globalnej instancji, aby była łatwo dostępna w całej aplikacji
 config_manager = ConfigManager()

@@ -10,6 +10,7 @@ class ChallengeCreate(BaseModel):
     end_date: datetime
     rules: dict | None = None
     is_active: bool = True
+    discord_channel_id: str | None = None
 
 
 class ChallengeRead(BaseModel):
@@ -20,6 +21,7 @@ class ChallengeRead(BaseModel):
     end_date: datetime
     rules: dict | None
     is_active: bool
+    discord_channel_id: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
