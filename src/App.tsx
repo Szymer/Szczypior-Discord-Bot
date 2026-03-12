@@ -11,6 +11,7 @@ import RulesPage from "@/pages/RulesPage";
 import HomePage from "@/pages/HomePage";
 import ChallengePage from "@/pages/ChallengePage";
 import EventPage from "@/pages/EventPage";
+import AdminPage from "@/pages/AdminPage";
 import AppLayout from "@/components/AppLayout";
 import NotFound from "@/pages/NotFound";
 
