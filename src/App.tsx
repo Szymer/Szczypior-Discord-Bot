@@ -38,6 +38,7 @@ const App = () => (
             <Route path="/rules" element={<ProtectedRoute><RulesPage /></ProtectedRoute>} />
             <Route path="/challenge/:id" element={<ProtectedRoute><ChallengePage /></ProtectedRoute>} />
             <Route path="/event/:id" element={<ProtectedRoute><EventPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

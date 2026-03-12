@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { BarChart3, Home, LogOut, Medal, ScrollText, Shield, BookOpen } from "lucide-react";
+import { BarChart3, Home, LogOut, Medal, ScrollText, Shield, BookOpen, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/home", label: "START", icon: Home },
@@ -9,6 +9,7 @@ const navItems = [
   { to: "/stats", label: "STATYSTYKI", icon: Shield },
   { to: "/history", label: "HISTORIA", icon: ScrollText },
   { to: "/rules", label: "ZASADY", icon: BookOpen },
+  { to: "/admin", label: "ADMIN", icon: Settings },
 ];
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
