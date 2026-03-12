@@ -46,6 +46,24 @@ class ActivityRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ActivityUpdate(BaseModel):
+    activity_type: str | None = None
+    distance_km: float | None = Field(default=None, gt=0)
+    weight_kg: float | None = None
+    elevation_m: int | None = None
+    weight_bonus_points: int | None = Field(default=None, ge=0)
+    elevation_bonus_points: int | None = Field(default=None, ge=0)
+    mission_bonus_points: int | None = Field(default=None, ge=0)
+    total_points: int | None = Field(default=None, ge=0)
+    special_mission_id: int | None = None
+    challenge_id: int | None = None
+    time_minutes: int | None = Field(default=None, ge=0)
+    pace: str | None = None
+    heart_rate_avg: int | None = Field(default=None, ge=0)
+    calories: int | None = Field(default=None, ge=0)
+    ai_comment: str | None = None
+
+
 class UserRankingRead(BaseModel):
     id: int
     discord_id: str

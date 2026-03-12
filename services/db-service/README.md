@@ -32,3 +32,8 @@ Prefix: `/api/v1`
 - `GET /users/{discord_id}/history`
 - `GET /rankings`
 - `GET /missions/active`
+- `POST /challenges` - tworzy challenge i zawsze zapisuje `activity_rules`; jeśli request ich nie poda, serwis tworzy domyślne reguły z `libs/shared/constants.py`
+- `GET /challenges/{challenge_id}/activity-rules`
+- `POST /challenges/{challenge_id}/activity-rules` - tworzy reguły tylko dla challenge, który jeszcze ich nie ma; pusty body oznacza reguły domyślne
+- `PUT /challenges/{challenge_id}/activity-rules` - podmienia cały zestaw reguł challenge; pusty body oznacza domyślne reguły
+- `PATCH /challenges/{challenge_id}/activity-rules` - aktualizuje wybrane pola istniejących reguł po `activity_type`

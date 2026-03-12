@@ -54,10 +54,18 @@ class Challenge(Base):
     end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     rules: Mapped[dict | None] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    discord_channel_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     activities: Mapped[list["Activity"]] = relationship(back_populates="challenge")
-    participants: Mapped[list["ChallengeParticipant"]] = relationship(back_populates="challenge")
+    participants: Mapped[list["ChallengeParticipant"]] = relationship(
+        back_populates="challenge",
+        cascade="all, delete-orphan",
+    )
+    activity_rules: Mapped[list["ActivityRule"]] = relationship(
+        back_populates="challenge",
+        cascade="all, delete-orphan",
+    )
 
 
 class Activity(Base):
@@ -99,6 +107,24 @@ class Activity(Base):
     challenge: Mapped[Challenge | None] = relationship(back_populates="activities")
 
 
+class ActivityRule(Base):
+    __tablename__ = "activity_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    challenge_id: Mapped[int] = mapped_column(
+        ForeignKey("challenges.id", ondelete="CASCADE"), nullable=False
+    )
+    activity_type: Mapped[str] = mapped_column(Text, nullable=False)
+    emoji: Mapped[str] = mapped_column(Text, nullable=False, default="🏃")
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    base_points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unit: Mapped[str] = mapped_column(Text, nullable=False, default="km")
+    min_distance: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.0)
+    bonuses: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    challenge: Mapped["Challenge"] = relationship(back_populates="activity_rules")
+
+
 class AirsoftEvent(Base):
     __tablename__ = "airsoft_events"
 
@@ -112,6 +138,7 @@ class AirsoftEvent(Base):
     price: Mapped[float | None] = mapped_column(Numeric)
     currency: Mapped[str] = mapped_column(Text, default="PLN", nullable=False)
     event_url: Mapped[str | None] = mapped_column(Text)
+    discord_channel_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

@@ -15,10 +15,13 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.db.models import Challenge
+from app.schemas.activity_rule import ActivityRulePatchPayload, ActivityRulePayload
 from app.schemas.challenge import ChallengeCreate, ChallengeParticipantCreate
 from app.schemas.user import UserUpsert
 from app.services.challenges_manager import ChallengesManager
 from app.services.users_manager import UsersManager
+from libs.shared.constants import ACTIVITY_TYPES
 
 
 def _make_challenge(name: str = "Testowy Challenge") -> ChallengeCreate:
@@ -66,6 +69,53 @@ class TestCreateChallenge:
         assert fetched is not None
         assert fetched.rules["min_distance_km"] == 5
 
+    def test_create_challenge_adds_default_activity_rules_when_missing(self, db):
+        manager = ChallengesManager(db)
+        payload = ChallengeCreate(
+            name="Challenge z default rules",
+            description="Brak jawnych activity rules",
+            start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+            rules={"goal": "distance"},
+            is_active=True,
+        )
+
+        challenge = manager.create_challenge(payload)
+        activity_rules = manager.list_activity_rules(challenge.id)
+
+        assert len(activity_rules) == len(ACTIVITY_TYPES)
+        assert {rule.activity_type for rule in activity_rules} == set(ACTIVITY_TYPES)
+
+    def test_create_challenge_uses_custom_activity_rules_when_provided(self, db):
+        manager = ChallengesManager(db)
+        payload = ChallengeCreate(
+            name="Challenge z custom rules",
+            description="Custom activity rules",
+            start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+            rules={"goal": "distance"},
+            activity_rules=[
+                ActivityRulePayload(
+                    activity_type="rower",
+                    emoji="🚲",
+                    display_name="Szybki rower",
+                    base_points=555,
+                    unit="km",
+                    min_distance=10,
+                    bonuses=["przewyższenie"],
+                )
+            ],
+            is_active=True,
+        )
+
+        challenge = manager.create_challenge(payload)
+        activity_rules = manager.list_activity_rules(challenge.id)
+
+        assert len(activity_rules) == 1
+        assert activity_rules[0].activity_type == "rower"
+        assert activity_rules[0].base_points == 555
+        assert activity_rules[0].display_name == "Szybki rower"
+
 
 class TestGetChallenge:
     """Odczyt pojedynczego challenge."""
@@ -85,6 +135,96 @@ class TestGetChallenge:
         result = manager.get_challenge(99999)
 
         assert result is None
+
+
+class TestActivityRules:
+    def test_create_activity_rules_for_existing_challenge(self, db):
+        manager = ChallengesManager(db)
+        challenge = Challenge(
+            name="Legacy Challenge",
+            description="Utworzony bez activity rules",
+            start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+            rules={"goal": "distance"},
+            is_active=True,
+            discord_channel_id=None,
+            created_at=datetime.utcnow(),
+        )
+        db.add(challenge)
+        db.commit()
+        db.refresh(challenge)
+
+        created_rules = manager.create_activity_rules(challenge.id, None)
+
+        assert len(created_rules) == len(ACTIVITY_TYPES)
+        assert {rule.activity_type for rule in created_rules} == set(ACTIVITY_TYPES)
+
+    def test_create_activity_rules_fails_when_challenge_already_has_rules(self, db):
+        manager = ChallengesManager(db)
+        challenge = manager.create_challenge(_make_challenge())
+
+        with pytest.raises(ValueError, match="already has activity rules"):
+            manager.create_activity_rules(challenge.id, None)
+
+    def test_replace_activity_rules_overwrites_existing_set(self, db):
+        manager = ChallengesManager(db)
+        challenge = manager.create_challenge(_make_challenge())
+
+        replaced = manager.replace_activity_rules(
+            challenge.id,
+            [
+                ActivityRulePayload(
+                    activity_type="cardio",
+                    emoji="🎯",
+                    display_name="Cardio Premium",
+                    base_points=999,
+                    unit="km",
+                    min_distance=2.5,
+                    bonuses=["obciążenie"],
+                )
+            ],
+        )
+
+        assert len(replaced) == 1
+        assert replaced[0].activity_type == "cardio"
+        assert replaced[0].base_points == 999
+        assert replaced[0].display_name == "Cardio Premium"
+
+    def test_patch_activity_rules_updates_selected_fields_only(self, db):
+        manager = ChallengesManager(db)
+        challenge = manager.create_challenge(_make_challenge())
+        before = {rule.activity_type: rule for rule in manager.list_activity_rules(challenge.id)}
+
+        patched = manager.patch_activity_rules(
+            challenge.id,
+            [
+                ActivityRulePatchPayload(
+                    activity_type="rower",
+                    base_points=777,
+                    min_distance=12,
+                )
+            ],
+        )
+        after = {rule.activity_type: rule for rule in patched}
+
+        assert after["rower"].base_points == 777
+        assert float(after["rower"].min_distance) == 12
+        assert after["rower"].display_name == before["rower"].display_name
+
+    def test_patch_activity_rules_fails_for_unknown_activity_type(self, db):
+        manager = ChallengesManager(db)
+        challenge = manager.create_challenge(_make_challenge())
+
+        with pytest.raises(ValueError, match="not found"):
+            manager.patch_activity_rules(
+                challenge.id,
+                [
+                    ActivityRulePatchPayload(
+                        activity_type="nieistniejacy_typ",
+                        base_points=1,
+                    )
+                ],
+            )
 
 
 class TestListChallenges:

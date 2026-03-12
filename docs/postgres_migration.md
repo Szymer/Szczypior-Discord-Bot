@@ -21,6 +21,12 @@ DATABASE_URL=postgresql://postgres.[project-ref]:[db-password]@aws-0-eu-central-
 
 ## 2. Wykonanie migracji
 
+Jeśli baza została założona na starszym schemacie i `db-service` rzuca błędy typu `column "rules" of relation "challenges" does not exist`, najpierw uruchom migrację wyrównującą:
+
+```bash
+psql "$DATABASE_URL" -f infrastructure/postgres/migrations/001_sync_challenges_schema.sql
+```
+
 ### Opcja A: Przez Supabase Dashboard
 1. Zaloguj się do [Supabase Dashboard](https://app.supabase.com)
 2. Wybierz swój projekt

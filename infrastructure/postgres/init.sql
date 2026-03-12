@@ -142,6 +142,28 @@ COMMENT ON TABLE challenges IS 'Challenges with rules and active status';
 COMMENT ON COLUMN challenges.rules IS 'JSONB field to store challenge rules';
 
 -- ============================================================================
+-- TABLE: activity_rules
+-- ============================================================================
+-- Per-challenge activity type rules – mirrors ACTIVITY_TYPES in bot/constants.py
+CREATE TABLE IF NOT EXISTS activity_rules (
+    id SERIAL PRIMARY KEY,
+    challenge_id INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+    activity_type TEXT NOT NULL,
+    emoji TEXT NOT NULL DEFAULT '🏃',
+    display_name TEXT NOT NULL,
+    base_points INTEGER NOT NULL DEFAULT 0,
+    unit TEXT NOT NULL DEFAULT 'km',
+    min_distance NUMERIC(10, 2) NOT NULL DEFAULT 0.0,
+    bonuses JSONB NOT NULL DEFAULT '[]',
+    UNIQUE (challenge_id, activity_type)
+);
+
+CREATE INDEX idx_activity_rules_challenge_id ON activity_rules(challenge_id);
+
+COMMENT ON TABLE activity_rules IS 'Per-challenge activity type rules';
+COMMENT ON COLUMN activity_rules.bonuses IS 'JSONB array of bonus names: ["obciążenie","przewyższenie"]';
+
+-- ============================================================================
 -- TABLE: challenge_participants
 -- ============================================================================
 -- Tracks participants in challenges
@@ -267,6 +289,35 @@ INSERT INTO special_missions (
     '2025-12-31 23:59:59+00',
     TRUE
 ) ON CONFLICT DO NOTHING;
+
+-- Seed a template challenge with default activity rules
+-- Used as a reference; set is_active=FALSE so it doesn't appear in active queries
+DO $$
+DECLARE
+    v_challenge_id INTEGER;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM challenges WHERE name = 'Szablon Reguł') THEN
+        INSERT INTO challenges (name, description, start_date, end_date, is_active, created_at)
+        VALUES (
+            'Szablon Reguł',
+            'Domyślny szablon reguł aktywności – skopiuj przy tworzeniu nowego challenge''u',
+            '2025-01-01 00:00:00+00',
+            '2030-12-31 23:59:59+00',
+            FALSE,
+            NOW()
+        )
+        RETURNING id INTO v_challenge_id;
+
+        INSERT INTO activity_rules (challenge_id, activity_type, emoji, display_name, base_points, unit, min_distance, bonuses)
+        VALUES
+            (v_challenge_id, 'bieganie_teren',  '🏃',      'Bieganie (Teren)',                         1000, 'km', 0.0, '["obciążenie","przewyższenie"]'),
+            (v_challenge_id, 'bieganie_bieznia','🏃‍♂️', 'Bieganie (Bieżnia)',                       800,  'km', 0.0, '["obciążenie"]'),
+            (v_challenge_id, 'plywanie',        '🏊',      'Pływanie',                                4000, 'km', 0.0, '[]'),
+            (v_challenge_id, 'rower',           '🚴',      'Rower/Rolki',                             300,  'km', 6.0, '["przewyższenie"]'),
+            (v_challenge_id, 'spacer',          '🚶',      'Spacer/Trekking',                         200,  'km', 3.0, '["obciążenie","przewyższenie"]'),
+            (v_challenge_id, 'cardio',          '🔫',      'Inne Cardio (wioślarz, orbitrek, ASG)',   800,  'km', 0.0, '["obciążenie","przewyższenie"]');
+    END IF;
+END $$;
 
 -- ============================================================================
 -- HELPER QUERIES (COMMENT OUT AFTER SETUP)

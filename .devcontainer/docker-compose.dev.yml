@@ -10,6 +10,8 @@ services:
     command: sleep infinity
     env_file:
       - ../.env
+    environment:
+      DB_SERVICE_BASE_URL: http://db-service:80
     dns:
       - 8.8.8.8
       - 8.8.4.4

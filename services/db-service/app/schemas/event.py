@@ -13,6 +13,7 @@ class AirsoftEventCreate(BaseModel):
     price: float | None = None
     currency: str = "PLN"
     event_url: str | None = None
+    discord_channel_id: str | None = None
 
 
 class AirsoftEventRead(BaseModel):
@@ -26,6 +27,7 @@ class AirsoftEventRead(BaseModel):
     price: float | None
     currency: str
     event_url: str | None
+    discord_channel_id: str | None
     created_at: datetime
     updated_at: datetime
 
