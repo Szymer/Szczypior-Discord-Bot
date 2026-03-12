@@ -9,6 +9,7 @@ credentials.json
 *credentials*.json
 authorized_user.json
 token.json
+service_account.json
 
 # Środowiska wirtualne Python
 venv/
@@ -158,3 +159,6 @@ cython_debug/
 # Logs
 logs/
 *.log
+
+# Static analysis artifacts
+vulture_findings.json

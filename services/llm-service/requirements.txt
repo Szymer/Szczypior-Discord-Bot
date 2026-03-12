@@ -1,0 +1,4 @@
+# Placeholder requirements for llm-service
+fastapi
+uvicorn
+pydantic

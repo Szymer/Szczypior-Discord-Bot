@@ -1,0 +1,36 @@
+{
+"name": "Szczypior Python Dev",
+  "dockerComposeFile": "docker-compose.dev.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/Szczypior-Discord-Bot",
+  "settings": {
+    "python.pythonPath": "/usr/local/bin/python",
+    "python.formatting.provider": "black",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "editor.formatOnSave": true
+  },
+  "forwardPorts": [
+    8000,
+    3000
+  ],
+  "runServices": [
+    "db-service"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-azuretools.vscode-docker",
+        "ms-python.debugpy",
+        "bradlc.vscode-tailwindcss",
+        "formulahendry.docker-explorer",
+        "GitHub.copilot-chat",
+        "tht13.python"
+      ]
+    }
+  },
+  "postCreateCommand": "pip install -r services/db-service/requirements.txt",
+  "remoteUser": "root"
+ }

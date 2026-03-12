@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  workspace:
+    image: python:3.13-slim
+    volumes:
+      - ..:/workspaces/Szczypior-Discord-Bot:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspaces/Szczypior-Discord-Bot
+    command: sleep infinity
+    env_file:
+      - ../.env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - szczypior-network
+
+  db-service:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/db-service.Dockerfile
+    env_file:
+      - ../.env
+    ports:
+      - "8000:80"
+    volumes:
+      - ../services/db-service/app:/code/app:cached
+    command: uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
+    networks:
+      - szczypior-network
+    profiles: [ "api" ]
+
+  discord-bot:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/discord-bot.Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      API_URL: http://db-service:80
+    depends_on:
+      - db-service
+    networks:
+      - szczypior-network
+    profiles: [ "bot" ]
+
+networks:
+  szczypior-network:
+    driver: bridge
