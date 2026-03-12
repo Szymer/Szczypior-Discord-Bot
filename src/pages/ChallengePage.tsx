@@ -3,10 +3,71 @@ import { fitnessChallenges } from "@/lib/eventsData";
 import { useAuth } from "@/context/AuthContext";
 import { getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 import StatCard from "@/components/StatCard";
-import { ArrowLeft, Trophy, Calendar, Target, Activity, TrendingUp, Clock, Flame } from "lucide-react";
+import { ArrowLeft, Trophy, Calendar, Target, ChevronRight, Users } from "lucide-react";
 
-const ChallengePage = () => {
-  const { id } = useParams();
+const ChallengeListView = () => {
+  const activeChallenges = fitnessChallenges.filter(c => c.isActive);
+  const pastChallenges = fitnessChallenges.filter(c => !c.isActive);
+
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-border pb-3">
+        <h1 className="text-xl font-bold text-primary tracking-widest">WYZWANIA FITNESS</h1>
+        <p className="text-tactical text-muted-foreground mt-1">// WYBIERZ WYZWANIE, ABY ZOBACZYĆ AKTYWNOŚCI UCZESTNIKÓW</p>
+      </div>
+
+      {activeChallenges.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-tactical text-muted-foreground">▸ AKTYWNE WYZWANIA</p>
+          {activeChallenges.map(ch => (
+            <Link
+              key={ch.id}
+              to={`/challenge/${ch.id}`}
+              className="border border-primary/40 bg-card p-4 flex items-center gap-4 hover:bg-primary/5 transition-colors group glow-amber block"
+            >
+              <span className="text-3xl">{ch.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-foreground font-bold tracking-wide">{ch.name}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{ch.description}</p>
+                <div className="flex items-center gap-4 mt-2 text-tactical text-muted-foreground">
+                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {ch.startDate} — {ch.endDate}</span>
+                  <span className="flex items-center gap-1"><Trophy className="w-3 h-3 text-primary" /> +{ch.bonusPoints.toLocaleString()} pkt</span>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {pastChallenges.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-tactical text-muted-foreground">▸ ZAKOŃCZONE WYZWANIA</p>
+          {pastChallenges.map(ch => (
+            <Link
+              key={ch.id}
+              to={`/challenge/${ch.id}`}
+              className="border border-border bg-card p-4 flex items-center gap-4 hover:bg-secondary/50 transition-colors group block"
+            >
+              <span className="text-3xl opacity-60">{ch.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-foreground font-bold tracking-wide">{ch.name}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{ch.description}</p>
+                <div className="flex items-center gap-4 mt-2 text-tactical text-muted-foreground">
+                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {ch.startDate} — {ch.endDate}</span>
+                  <span className="flex items-center gap-1"><Trophy className="w-3 h-3" /> +{ch.bonusPoints.toLocaleString()} pkt</span>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ChallengeDetailView = ({ id }: { id: string }) => {
   const { user } = useAuth();
   const challenge = fitnessChallenges.find(c => c.id === id);
 
@@ -14,12 +75,11 @@ const ChallengePage = () => {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Wyzwanie nie znalezione.</p>
-        <Link to="/home" className="text-primary hover:underline mt-2 inline-block">← Powrót</Link>
+        <Link to="/challenges" className="text-primary hover:underline mt-2 inline-block">← Powrót</Link>
       </div>
     );
   }
 
-  // Filter activities within challenge date range
   const allActivities = getPlayerActivities(user.id);
   const challengeActivities = allActivities.filter(
     a => a.date >= challenge.startDate && a.date <= challenge.endDate
@@ -30,11 +90,9 @@ const ChallengePage = () => {
   const totalDuration = challengeActivities.reduce((s, a) => s + a.durationMin, 0);
   const activityCount = challengeActivities.length;
 
-  // Best pace (running)
   const runningActs = challengeActivities.filter(a => a.type === "running_terrain" || a.type === "running_treadmill");
   const bestPace = runningActs.length > 0 ? Math.min(...runningActs.map(a => a.paceMinPerKm)) : 0;
 
-  // Activity type distribution in this challenge
   const typeCounts: Record<string, { count: number; distance: number; points: number }> = {};
   challengeActivities.forEach(a => {
     if (!typeCounts[a.type]) typeCounts[a.type] = { count: 0, distance: 0, points: 0 };
@@ -42,21 +100,16 @@ const ChallengePage = () => {
     typeCounts[a.type].distance += a.distanceKm;
     typeCounts[a.type].points += a.pointsEarned;
   });
-
   const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1].points - a[1].points);
 
-  // Longest single activity
   const longestActivity = challengeActivities.length > 0
     ? challengeActivities.reduce((best, a) => a.distanceKm > best.distanceKm ? a : best)
     : null;
 
-  // Check if goal might be met (simple heuristic based on distance)
-  const goalProgress = totalDistance;
-
   return (
     <div className="space-y-6">
-      <Link to="/home" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm">
-        <ArrowLeft className="w-4 h-4" /> POWRÓT DO CENTRUM
+      <Link to="/challenges" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-sm">
+        <ArrowLeft className="w-4 h-4" /> POWRÓT DO WYZWAŃ
       </Link>
 
       {/* Challenge header */}
@@ -93,10 +146,10 @@ const ChallengePage = () => {
         </div>
       </div>
 
-      {/* Panel Operatora for this challenge */}
+      {/* Operator panel */}
       <div className="border-b border-border pb-3">
-        <h2 className="text-lg font-bold text-primary tracking-widest">PANEL OPERATORA — {challenge.name.toUpperCase()}</h2>
-        <p className="text-tactical text-muted-foreground mt-1">// STATYSTYKI {user.username} W OKRESIE WYZWANIA</p>
+        <h2 className="text-lg font-bold text-primary tracking-widest">AKTYWNOŚCI UCZESTNIKÓW — {challenge.name.toUpperCase()}</h2>
+        <p className="text-tactical text-muted-foreground mt-1">// DANE {user.username} W OKRESIE WYZWANIA</p>
       </div>
 
       {challengeActivities.length === 0 ? (
@@ -106,7 +159,6 @@ const ChallengePage = () => {
         </div>
       ) : (
         <>
-          {/* Main stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard label="AKTYWNOŚCI" value={activityCount} sub="W OKRESIE WYZWANIA" variant="primary" />
             <StatCard label="PUNKTY" value={totalPoints.toLocaleString()} sub="ZDOBYTE W WYZWANIU" variant="primary" />
@@ -114,28 +166,11 @@ const ChallengePage = () => {
             <StatCard label="CZAS" value={formatDuration(totalDuration)} sub="ŁĄCZNY CZAS" />
           </div>
 
-          {/* Secondary stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              label="NAJLEPSZE TEMPO"
-              value={bestPace > 0 ? `${formatPace(bestPace)}/km` : "—"}
-              sub="BIEGANIE"
-            />
-            <StatCard
-              label="ŚR. PKT/AKT."
-              value={Math.round(totalPoints / activityCount)}
-              sub="ŚREDNIA"
-            />
-            <StatCard
-              label="ŚR. DYSTANS"
-              value={`${(totalDistance / activityCount).toFixed(1)} km`}
-              sub="NA AKTYWNOŚĆ"
-            />
-            <StatCard
-              label="NAJDŁUŻSZY"
-              value={longestActivity ? `${longestActivity.distanceKm} km` : "—"}
-              sub={longestActivity ? ACTIVITY_CONFIG[longestActivity.type].label : ""}
-            />
+            <StatCard label="NAJLEPSZE TEMPO" value={bestPace > 0 ? `${formatPace(bestPace)}/km` : "—"} sub="BIEGANIE" />
+            <StatCard label="ŚR. PKT/AKT." value={Math.round(totalPoints / activityCount)} sub="ŚREDNIA" />
+            <StatCard label="ŚR. DYSTANS" value={`${(totalDistance / activityCount).toFixed(1)} km`} sub="NA AKTYWNOŚĆ" />
+            <StatCard label="NAJDŁUŻSZY" value={longestActivity ? `${longestActivity.distanceKm} km` : "—"} sub={longestActivity ? ACTIVITY_CONFIG[longestActivity.type].label : ""} />
           </div>
 
           {/* Activity breakdown */}
@@ -156,10 +191,7 @@ const ChallengePage = () => {
                         </span>
                       </div>
                       <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
+                        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   </div>
@@ -168,7 +200,7 @@ const ChallengePage = () => {
             </div>
           </div>
 
-          {/* Recent activities in challenge period */}
+          {/* Activities list */}
           <div className="border border-border bg-card p-4">
             <p className="text-tactical text-muted-foreground mb-3">// AKTYWNOŚCI W OKRESIE WYZWANIA</p>
             <div className="space-y-2">
@@ -188,6 +220,13 @@ const ChallengePage = () => {
       )}
     </div>
   );
+};
+
+const ChallengePage = () => {
+  const { id } = useParams();
+
+  if (!id) return <ChallengeListView />;
+  return <ChallengeDetailView id={id} />;
 };
 
 export default ChallengePage;
