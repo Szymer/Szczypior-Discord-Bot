@@ -178,6 +178,44 @@ class BotOrchestrator:
         distance_km = time_minutes / 10.0
         return round(distance_km, 2)
 
+    def _parse_analysis_time_to_minutes(self, raw_time: Any) -> Optional[int]:
+        """Konwertuje różne formaty pola `czas` z analizy do liczby minut (int)."""
+        if raw_time in (None, ""):
+            return None
+
+        if isinstance(raw_time, (int, float)):
+            minutes = int(float(raw_time))
+            return minutes if minutes >= 0 else None
+
+        if not isinstance(raw_time, str):
+            return None
+
+        text = raw_time.strip().lower()
+        if not text:
+            return None
+
+        # Format HH:MM:SS
+        match_hms = re.fullmatch(r"(\d{1,3}):(\d{1,2}):(\d{1,2})", text)
+        if match_hms:
+            h, m, s = (int(part) for part in match_hms.groups())
+            total_minutes = h * 60 + m + (1 if s >= 30 else 0)
+            return total_minutes
+
+        # Format MM:SS
+        match_ms = re.fullmatch(r"(\d{1,4}):(\d{1,2})", text)
+        if match_ms:
+            m, s = (int(part) for part in match_ms.groups())
+            return m + (1 if s >= 30 else 0)
+
+        # Formaty typu "72 min", "72m", "72.5"
+        match_num = re.search(r"\d+(?:[\.,]\d+)?", text)
+        if match_num:
+            value = float(match_num.group(0).replace(",", "."))
+            minutes = int(round(value))
+            return minutes if minutes >= 0 else None
+
+        return None
+
     def _detect_activity_type_from_text(self, text: str) -> Optional[str]:
         """
         Wykrywa typ aktywności na podstawie keywordów w tekście.
@@ -315,7 +353,7 @@ class BotOrchestrator:
                             image_url,
                             user_prompt,
                             system_instruction=system_prompt,
-                            model_name="models/gemini-2.0-flash-exp"
+                            better_model="models/gemini-2.0-flash-exp"
                         )
                         logger.info("Retry with better model succeeded", extra={"analysis": analysis_result})
                     except Exception:
@@ -931,21 +969,61 @@ class BotOrchestrator:
         }
 
         user_prompt = self._build_motivational_comment_prompt(current_activity_summary, user_history)
+        user_prompt = (
+            user_prompt
+            + "\n\nZwróć wyłącznie sam komentarz motywacyjny jako czysty tekst (bez JSON, bez kluczy, bez markdown)."
+        )
         
         # Pobierz globalny system_prompt
         provider = config_manager.get_llm_provider()
         system_prompt = config_manager.get_system_prompt(provider)
 
         try:
-            return self.gemini_client.generate_text(
+            raw_response = self.gemini_client.generate_text(
                 user_prompt, 
                 temperature=0.8, 
                 max_tokens=200,
                 system_instruction=system_prompt
             )
+            return self._extract_motivational_comment(raw_response)
         except (LLMAnalysisError, LLMTimeoutError):
             logger.error("Failed to generate AI comment", exc_info=True)
             return "Dobra robota!"  # Fallback
+
+    def _extract_motivational_comment(self, response: Any) -> str:
+        """Normalizuje odpowiedź LLM i wyciąga sam komentarz motywacyjny."""
+        if response is None:
+            return "Dobra robota!"
+
+        if isinstance(response, dict):
+            return str(
+                response.get("motivational_comment")
+                or response.get("komentarz")
+                or response.get("period_summary")
+                or "Dobra robota!"
+            ).strip()
+
+        text = str(response).strip()
+        if not text:
+            return "Dobra robota!"
+
+        cleaned = text.replace("```json", "").replace("```", "").strip()
+
+        # Czasem model zwraca JSON zamiast czystego tekstu - wyciągnij właściwe pole.
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                extracted = (
+                    parsed.get("motivational_comment")
+                    or parsed.get("komentarz")
+                    or parsed.get("period_summary")
+                )
+                if extracted:
+                    return str(extracted).strip()
+        except json.JSONDecodeError:
+            pass
+
+        return cleaned
 
     async def _save_activity_to_api(
         self, message: discord.Message, analysis: Dict[str, Any], channel_id: Optional[str] = None
@@ -1005,6 +1083,13 @@ class BotOrchestrator:
 
             iid = self._create_unique_id(message)
             display_name = get_display_name(message.author)
+            time_minutes = self._parse_analysis_time_to_minutes(analysis.get("czas"))
+
+            if analysis.get("czas") and time_minutes is None:
+                logger.warning(
+                    "Could not parse analysis time value",
+                    extra={"message_id": message.id, "raw_time": analysis.get("czas")},
+                )
 
             payload = ActivityCreate(
                 discord_id=str(message.author.id),
@@ -1019,7 +1104,7 @@ class BotOrchestrator:
                 elevation_bonus_points=elevation_bonus,
                 mission_bonus_points=0,
                 total_points=total_points,
-                time_minutes=int(analysis["czas"]) if analysis.get("czas") else None,
+                time_minutes=time_minutes,
                 pace=analysis.get("tempo"),
                 heart_rate_avg=int(analysis["puls_sredni"]) if analysis.get("puls_sredni") else None,
                 calories=int(analysis["kalorie"]) if analysis.get("kalorie") else None,

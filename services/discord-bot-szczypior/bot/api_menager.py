@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from urllib import error, parse, request
 
@@ -34,6 +35,13 @@ class APIManager:
 		configured_base_url = base_url or config_manager.get_db_service_base_url()
 		self.api_base_url = self._normalize_api_base_url(configured_base_url)
 		self.timeout_seconds = timeout_seconds
+		self.api_key_header_name = os.getenv("DB_SERVICE_API_KEY_HEADER", "X-API-Key")
+		self.api_key = os.getenv("DB_SERVICE_API_KEY", "").strip()
+
+		if not self.api_key:
+			raise APIManagerError(
+				"Brak DB_SERVICE_API_KEY. Ustaw API key, aby autoryzować wywołania do db-service."
+			)
 
 	def __enter__(self) -> "APIManager":
 		return self
@@ -65,7 +73,7 @@ class APIManager:
 
 		try:
 			body = None
-			headers = {}
+			headers = {self.api_key_header_name: self.api_key}
 			if json_payload is not None:
 				body = json.dumps(json_payload).encode("utf-8")
 				headers["Content-Type"] = "application/json"

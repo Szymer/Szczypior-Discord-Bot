@@ -266,7 +266,7 @@ if __name__ == "__main__":
 
 ## 8. Dependencies
 
-Dodaj do `services/discord-bot/requirements.txt`:
+Dodaj do `services/discord-bot-szczypior/requirements.txt`:
 ```
 psycopg2-binary>=2.9.0
 # lub dla async:

@@ -270,5 +270,5 @@ See [postgres_migration.md](../../docs/postgres_migration.md) for deployment ins
 ## Files
 
 - `init.sql` - Full schema definition with seed data
-- `../../services/discord-bot/bot/db_manager.py` - Python database client
+- `../../services/discord-bot-szczypior/bot/db_manager.py` - Python database client
 - `../../tools/deploy_schema.py` - Deployment script

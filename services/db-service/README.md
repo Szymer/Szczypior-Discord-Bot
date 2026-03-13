@@ -21,8 +21,18 @@ Wymagane zmienne:
 - `host`
 - `port`
 - `dbname`
+- `DB_SERVICE_API_KEY` (wymagany klucz do autoryzacji wszystkich endpointów pod `/api/v1`)
 
 Alternatywnie można podać pojedyncze `DATABASE_URL`, ale dla Supabase Session Pooler preferowany jest zestaw powyższych pól, z automatycznie dodawanym `sslmode=require`.
+
+Opcjonalnie:
+- `DB_SERVICE_API_KEY_HEADER` (domyślnie `X-API-Key`)
+
+Każde żądanie do `/api/v1/*` musi zawierać nagłówek z kluczem API, np.:
+
+```bash
+curl -H "X-API-Key: <twoj-klucz>" http://127.0.0.1:8080/api/v1/health
+```
 
 ## API (MVP)
 Prefix: `/api/v1`

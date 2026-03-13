@@ -11,6 +11,7 @@
     "editor.formatOnSave": true
   },
   "forwardPorts": [
+    8001,
     8000,
     3000
   ],
@@ -27,10 +28,12 @@
         "bradlc.vscode-tailwindcss",
         "formulahendry.docker-explorer",
         "GitHub.copilot-chat",
-        "tht13.python"
+        "tht13.python",
+        "ms-vscode.vscode-typescript-next", 
+        "esbenp.prettier-vscode"  
       ]
     }
   },
-  "postCreateCommand": "pip install -r services/db-service/requirements.txt && pip install -r services/discord-bot/requirements.txt",
+  "postCreateCommand": "apt-get update && apt-get install -y nodejs npm && pip install -r services/db-service/requirements.txt && pip install -r services/discord-bot-szczypior/requirements.txt && pip install -r services/web-dashboard/requirements.txt",
   "remoteUser": "root"
 }

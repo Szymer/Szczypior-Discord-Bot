@@ -180,7 +180,7 @@ PostgreSQL
 Django Admin
 Najważniejsze pliki
 discord bot entrypoint
-services/discord-bot/bot/main.py
+services/discord-bot-szczypior/bot/main.py
 LLM API
 services/llm-service/app/main.py
 Django panel

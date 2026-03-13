@@ -9,11 +9,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # Ścieżki WZGLĘDNE do kontekstu (infrastructure/docker/)
-COPY services/discord-bot/requirements.txt /app/requirements.txt
+COPY services/discord-bot-szczypior/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Skopiuj kod bota (z services/discord-bot/)
-COPY services/discord-bot /app
+# Skopiuj kod bota (z services/discord-bot-szczypior/)
+COPY services/discord-bot-szczypior /app
 
 COPY libs /app/libs
 

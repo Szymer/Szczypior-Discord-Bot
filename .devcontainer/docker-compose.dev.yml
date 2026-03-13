@@ -1,8 +1,8 @@
-version: "3.9"
-
 services:
   workspace:
-    image: python:3.13-slim
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/workspace.Dockerfile
     volumes:
       - ..:/workspaces/Szczypior-Discord-Bot:cached
       - /var/run/docker.sock:/var/run/docker.sock
@@ -46,6 +46,21 @@ services:
     networks:
       - szczypior-network
     profiles: [ "bot" ]
+  web-dashboard:
+    # NOWY SERWIS DJANGO+REACT
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/web-dashboard.Dockerfile # Twój Dockerfile
+    env_file:
+      - ../.env
+    ports:
+      - "8001:8000" # Django na osobnym porcie hosta
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+    networks:
+      - szczypior-network
+    profiles: [ "dashboard" ] # osobny profil
 
 networks:
   szczypior-network:

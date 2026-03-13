@@ -5,7 +5,8 @@ import os
 from io import BytesIO
 from typing import Any, Dict, Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import requests
 from dotenv import load_dotenv
 from PIL import Image
@@ -18,6 +19,14 @@ load_dotenv()
 
 class GeminiClient(BaseLLMClient):
     """Klient do komunikacji z Google Gemini AI."""
+
+    _MODEL_ALIASES = {
+        "gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
+        "gemini-3.1-flash": "gemini-3.1-flash",
+        "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+        "gemini-2.5-flash": "gemini-2.5-flash",
+        "gemini-2.0-flash-exp": "gemini-2.0-flash-exp",
+    }
 
     def __init__(
         self,
@@ -39,33 +48,126 @@ class GeminiClient(BaseLLMClient):
         if not api_key:
             raise ValueError("Nie znaleziono klucza GEMINI_API_KEY w zmiennych środowiskowych.")
 
-        genai.configure(api_key=api_key)
+        # Nowy SDK używa centralnego klienta zamiast obiektów GenerativeModel.
+        self.client = genai.Client(api_key=api_key)
 
         # Ustaw domyślny model jeśli nie podano
         if not self.model_name:
-            self.model_name = "models/gemini-2.5-flash-lite"
+            self.model_name = "models/gemini-3.1-flash-lite"
+
+        self.model_name = self._normalize_model_name(self.model_name)
 
         # Zapisz parametry generowania
         self.generation_params = generation_params or {}
-        
-        # Model będzie tworzony dynamicznie z system_instruction w metodach
 
-    def _create_model(self, system_instruction: Optional[str] = None) -> genai.GenerativeModel:
+    def _fallback_models(self) -> list[str]:
+        """Zwraca listę modeli fallback używanych gdy bazowy model jest niedostępny."""
+        env_raw = os.getenv("GEMINI_FALLBACK_MODELS", "").strip()
+        if env_raw:
+            return [self._normalize_model_name(item) for item in env_raw.split(",") if item.strip()]
+
+        return [
+            "models/gemini-2.5-flash-lite",
+            "models/gemini-2.5-flash",
+        ]
+
+    @staticmethod
+    def _should_try_fallback(exc: Exception) -> bool:
+        """Sprawdza czy błąd wskazuje na niedostępny lub niewspierany model."""
+        message = str(exc).lower()
+        return (
+            "not_found" in message
+            or "is not found" in message
+            or "not supported for generatecontent" in message
+            or "unexpected model name format" in message
+        )
+
+    def _generate_content_with_fallback(
+        self,
+        *,
+        contents: Any,
+        config: Optional[genai_types.GenerateContentConfig] = None,
+    ):
+        """Wysyła request do Gemini i automatycznie fallbackuje model, gdy obecny jest niedostępny."""
+        candidates: list[str] = [self.model_name]
+        for candidate in self._fallback_models():
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+        last_exc: Optional[Exception] = None
+
+        for idx, candidate_model in enumerate(candidates):
+            try:
+                response = self.client.models.generate_content(
+                    model=candidate_model,
+                    contents=contents,
+                    config=config,
+                )
+
+                if candidate_model != self.model_name:
+                    print(
+                        f"⚠️ Model {self.model_name} niedostępny, przełączam na {candidate_model}."
+                    )
+                    self.model_name = candidate_model
+
+                return response
+            except Exception as exc:
+                last_exc = exc
+                has_next = idx < len(candidates) - 1
+                if not has_next or not self._should_try_fallback(exc):
+                    raise
+
+        if last_exc:
+            raise last_exc
+
+        raise RuntimeError("Nie udało się wykonać zapytania Gemini: brak modeli do użycia.")
+
+    @classmethod
+    def _normalize_model_name(cls, model_name: str) -> str:
+        """Normalizuje nazwę modelu do formatu oczekiwanego przez Gemini API."""
+        raw = (model_name or "").strip()
+        if not raw:
+            return "models/gemini-3.1-flash-lite"
+
+        raw = raw.replace("_", "-")
+        if raw.lower().startswith("models/"):
+            core = raw.split("/", 1)[1]
+        else:
+            core = raw
+
+        slug = core.strip().lower().replace(" ", "-")
+        canonical = cls._MODEL_ALIASES.get(slug, slug)
+        return f"models/{canonical}"
+
+    def _build_generation_config(
+        self,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_instruction: Optional[str] = None,
+    ) -> Optional[genai_types.GenerateContentConfig]:
         """
-        Tworzy instancję modelu z opcjonalną instrukcją systemową.
-        
-        Args:
-            system_instruction: Instrukcja systemowa dla modelu
-            
-        Returns:
-            Instancja GenerativeModel
+        Buduje konfigurację generowania dla nowego SDK google-genai.
         """
-        if system_instruction:
-            return genai.GenerativeModel(
-                self.model_name,
-                system_instruction=system_instruction
+        cfg: Dict[str, Any] = {
+            "temperature": (
+                temperature
+                if temperature is not None
+                else self.generation_params.get("temperature", 0.7)
             )
-        return genai.GenerativeModel(self.model_name)
+        }
+
+        tokens = (
+            max_tokens
+            if max_tokens is not None
+            else self.generation_params.get("max_output_tokens")
+        )
+        if tokens:
+            cfg["max_output_tokens"] = tokens
+
+        if system_instruction:
+            cfg["system_instruction"] = system_instruction
+
+        return genai_types.GenerateContentConfig(**cfg) if cfg else None
 
     def generate_text(
         self, 
@@ -86,33 +188,28 @@ class GeminiClient(BaseLLMClient):
         Returns:
             Wygenerowany tekst.
         """
+        model_response = None
         try:
-            # Utwórz model z system_instruction jeśli podano
-            model = self._create_model(system_instruction)
-            
-            # Użyj wartości z argumentów lub z konfiguracji
-            generation_config = {
-                "temperature": (
-                    temperature
-                    if temperature is not None
-                    else self.generation_params.get("temperature", 0.7)
-                )
-            }
-
-            tokens = (
-                max_tokens
-                if max_tokens is not None
-                else self.generation_params.get("max_output_tokens")
+            generation_config = self._build_generation_config(
+                temperature=temperature,
+                max_tokens=max_tokens,
+                system_instruction=system_instruction,
             )
-            if tokens:
-                generation_config["max_output_tokens"] = tokens
 
-            response = model.generate_content(prompt, generation_config=generation_config)
-            return response.text
+            model_response = self._generate_content_with_fallback(
+                contents=prompt,
+                config=generation_config,
+            )
+
+            if getattr(model_response, "text", None):
+                return model_response.text
+
+            raise ValueError("Gemini zwrócił pustą odpowiedź tekstową.")
         except Exception as e:
             print(f"Błąd API Gemini (generate_text): {e}")
             try:
-                print(f"Prompt feedback: {response.prompt_feedback}")
+                if model_response is not None:
+                    print(f"Prompt feedback: {model_response.prompt_feedback}")
             except Exception:
                 pass
             raise Exception(f"Błąd generowania tekstu: {e}")
@@ -130,16 +227,14 @@ class GeminiClient(BaseLLMClient):
         Returns:
             Słownik z przeanalizowanymi danymi (wynik parsowania JSON).
         """
+        model_response = None
         try:
-            # Utwórz model vision z system_instruction jeśli podano
-            vision_model = self._create_model(system_instruction)
-            
             # Pobierz obraz
-            response = requests.get(image_url, timeout=10)
-            response.raise_for_status()  # Sprawdź czy pobieranie się udało
+            image_response = requests.get(image_url, timeout=10)
+            image_response.raise_for_status()  # Sprawdź czy pobieranie się udało
 
             # Otwórz obraz za pomocą PIL
-            image = Image.open(BytesIO(response.content))
+            image = Image.open(BytesIO(image_response.content))
 
             # Opcjonalna optymalizacja: zmniejsz rozmiar jeśli obraz jest bardzo duży
             max_size = (2048, 2048)
@@ -166,13 +261,22 @@ class GeminiClient(BaseLLMClient):
             print(f"✅ Przetworzono obraz: rozmiar={len(image_bytes)} bajtów, wymiary={image.size}")
 
             # Przygotuj content dla API
-            content = [prompt, {"mime_type": content_type, "data": image_bytes}]
+            content = [prompt, genai_types.Part.from_bytes(data=image_bytes, mime_type=content_type)]
+
+            generation_config = self._build_generation_config(system_instruction=system_instruction)
 
             # Wyślij do Gemini
-            response = vision_model.generate_content(content)
+            model_response = self._generate_content_with_fallback(
+                contents=content,
+                config=generation_config,
+            )
 
             # Wyczyść i sparsuj odpowiedź JSON
-            response_text = response.text.strip().replace("```json", "").replace("```", "")
+            response_text = (getattr(model_response, "text", "") or "").strip()
+            response_text = response_text.replace("```json", "").replace("```", "")
+
+            if not response_text:
+                raise ValueError("Gemini zwrócił pustą odpowiedź dla analizy obrazu.")
 
             try:
                 parsed_result = json.loads(response_text)
@@ -202,7 +306,8 @@ class GeminiClient(BaseLLMClient):
         except Exception as e:
             print(f"❌ Błąd API Gemini (analyze_image): {e}")
             try:
-                print(f"Prompt feedback: {response.prompt_feedback}")
+                if model_response is not None:
+                    print(f"Prompt feedback: {model_response.prompt_feedback}")
             except Exception:
                 pass
             return {"typ_aktywnosci": None, "dystans": None, "komentarz": "Błąd analizy obrazu"}
@@ -217,7 +322,7 @@ class GeminiClient(BaseLLMClient):
         """Analizuje obraz używając lepszego modelu (retry dla problemów z kontrastem)."""
         # Tymczasowo zmień model
         original_model = self.model_name
-        self.model_name = better_model
+        self.model_name = self._normalize_model_name(better_model)
         
         try:
             print(f"🔄 Retrying image analysis with better model: {better_model}")
@@ -238,8 +343,9 @@ class GeminiClient(BaseLLMClient):
     def list_available_models(self):
         """Wyświetla dostępne modele Gemini, które wspierają generowanie treści."""
         print("Dostępne modele Gemini (do generowania treści):")
-        for m in genai.list_models():
-            if "generateContent" in m.supported_generation_methods:
+        for m in self.client.models.list():
+            supported_actions = getattr(m, "supported_actions", []) or []
+            if "generateContent" in supported_actions:
                 print(f"- {m.name}")
 
 
