@@ -1,5 +1,4 @@
-import { useAuth } from "@/context/AuthContext";
-import { getChartData, getActivityDistribution, getPlayerActivities, formatPace, formatDuration } from "@/lib/mockData";
+import { currentUser, getChartData, getActivityDistribution, getPlayerActivities, formatPace, formatDuration } from "@/lib/mockData";
 import StatCard from "@/components/StatCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 
