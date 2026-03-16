@@ -1,10 +1,8 @@
-import { useAuth } from "@/context/AuthContext";
 import StatCard from "@/components/StatCard";
-import { getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
+import { currentUser, getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 
 const DashboardPage = () => {
-  const { user } = useAuth();
-  if (!user) return null;
+  const user = currentUser;
 
   const activities = getPlayerActivities(user.id);
   const lastActivity = activities[0];

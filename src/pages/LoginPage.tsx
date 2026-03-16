@@ -1,23 +1,17 @@
-import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { Shield } from "lucide-react";
 
-const LoginPage = () => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const { login } = useAuth();
-  const navigate = useNavigate();
+const DiscordIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+  </svg>
+);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (login(username, password)) {
-      navigate("/home");
-    } else {
-      setError("BŁĄD AUTORYZACJI — NIEPRAWIDŁOWE DANE");
-    }
-  };
+const LoginPage = () => {
+  const { loginWithDiscord, isAuthenticated, isLoading, error } = useAuth();
+
+  if (isAuthenticated) return <Navigate to="/home" replace />;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -28,9 +22,9 @@ const LoginPage = () => {
           <p className="text-tactical text-muted-foreground mt-2">PANEL AUTORYZACJI</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="border border-border bg-card p-6 space-y-4 glow-amber">
+        <div className="border border-border bg-card p-6 space-y-4 glow-amber">
           <div className="border-b border-border pb-2 mb-4">
-            <span className="text-tactical text-muted-foreground">// WPROWADŹ DANE LOGOWANIA</span>
+            <span className="text-tactical text-muted-foreground">// ZALOGUJ SIĘ PRZEZ DISCORD</span>
           </div>
 
           {error && (
@@ -39,41 +33,25 @@ const LoginPage = () => {
             </div>
           )}
 
-          <div>
-            <label className="text-tactical text-muted-foreground block mb-1">IDENTYFIKATOR</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-input border border-border p-3 text-foreground font-mono focus:outline-none focus:border-primary transition-colors"
-              placeholder="CALL_SIGN"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="text-tactical text-muted-foreground block mb-1">HASŁO</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-input border border-border p-3 text-foreground font-mono focus:outline-none focus:border-primary transition-colors"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
           <button
-            type="submit"
-            className="w-full bg-primary text-primary-foreground font-bold py-3 tracking-widest hover:opacity-90 transition-opacity"
+            onClick={loginWithDiscord}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-3 bg-[hsl(235,86%,65%)] hover:bg-[hsl(235,86%,58%)] text-white font-bold py-3 tracking-widest transition-colors disabled:opacity-50"
           >
-            ZALOGUJ
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <DiscordIcon />
+                ZALOGUJ PRZEZ DISCORD
+              </>
+            )}
           </button>
 
           <p className="text-center text-muted-foreground text-xs mt-4">
-            DEMO: wpisz dowolny login i hasło
+            Autoryzacja przez Discord OAuth
           </p>
-        </form>
+        </div>
       </div>
     </div>
   );

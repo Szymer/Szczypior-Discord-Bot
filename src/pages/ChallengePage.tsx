@@ -1,7 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { fitnessChallenges } from "@/lib/eventsData";
-import { useAuth } from "@/context/AuthContext";
-import { getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
+import { currentUser, getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 import StatCard from "@/components/StatCard";
 import { ArrowLeft, Trophy, Calendar, Target, ChevronRight, Users } from "lucide-react";
 
@@ -68,10 +67,10 @@ const ChallengeListView = () => {
 };
 
 const ChallengeDetailView = ({ id }: { id: string }) => {
-  const { user } = useAuth();
+  const user = currentUser;
   const challenge = fitnessChallenges.find(c => c.id === id);
 
-  if (!challenge || !user) {
+  if (!challenge) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Wyzwanie nie znalezione.</p>

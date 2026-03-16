@@ -1,30 +1,102 @@
-import { createContext, useContext, useState, ReactNode } from "react";
-import { currentUser, Player } from "@/lib/mockData";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { Session } from "@supabase/supabase-js";
+import { supabase } from "@/auth/supabaseClient";
+import { fetchCurrentUser, DjangoUser } from "@/api/djangoClient";
+
+interface AuthUser extends DjangoUser {
+  isAdmin: boolean;
+}
 
 interface AuthContextType {
-  user: Player | null;
-  login: (username: string, password: string) => boolean;
-  logout: () => void;
+  user: AuthUser | null;
+  session: Session | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  loginWithDiscord: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<Player | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const login = (username: string, _password: string) => {
-    if (username && _password) {
-      setUser(currentUser);
-      return true;
+  const loadDjangoUser = useCallback(async () => {
+    try {
+      setError(null);
+      const djangoUser = await fetchCurrentUser();
+      setUser({
+        ...djangoUser,
+        isAdmin: djangoUser.role === "admin",
+      });
+    } catch (err) {
+      console.error("Failed to fetch Django user:", err);
+      setError("Nie udało się pobrać danych użytkownika");
+      setUser(null);
     }
-    return false;
+  }, []);
+
+  useEffect(() => {
+    // Set up auth state listener BEFORE getting initial session
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, newSession) => {
+        setSession(newSession);
+        if (newSession) {
+          // Defer Django fetch to avoid Supabase deadlock
+          setTimeout(() => loadDjangoUser(), 0);
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      if (initialSession) {
+        loadDjangoUser().finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [loadDjangoUser]);
+
+  const loginWithDiscord = async () => {
+    setError(null);
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "discord",
+      options: { redirectTo: window.location.origin + "/home" },
+    });
+    if (oauthError) {
+      setError(oauthError.message);
+    }
   };
 
-  const logout = () => setUser(null);
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        isAuthenticated: !!session && !!user,
+        isLoading,
+        error,
+        loginWithDiscord,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

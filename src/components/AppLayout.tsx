@@ -34,7 +34,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           <span className="text-tactical text-muted-foreground hidden sm:block">
             OPERATOR: <span className="text-foreground">{user?.username}</span>
           </span>
-          <span className="text-tactical text-primary">#{user?.rank}</span>
+          <span className="text-tactical text-primary">{user?.username}</span>
           <button onClick={handleLogout} className="text-muted-foreground hover:text-destructive transition-colors">
             <LogOut className="w-4 h-4" />
           </button>

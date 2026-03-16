@@ -1,10 +1,7 @@
-import { getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
-import { useAuth } from "@/context/AuthContext";
+import { currentUser, getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 
 const HistoryPage = () => {
-  const { user } = useAuth();
-  if (!user) return null;
-
+  const user = currentUser;
   const activities = getPlayerActivities(user.id);
 
   return (

@@ -1,7 +1,7 @@
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { AuthProvider } from "@/context/AuthContext";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import RankingPage from "@/pages/RankingPage";
@@ -12,16 +12,10 @@ import HomePage from "@/pages/HomePage";
 import ChallengePage from "@/pages/ChallengePage";
 import EventPage from "@/pages/EventPage";
 import AdminPage from "@/pages/AdminPage";
-import AppLayout from "@/components/AppLayout";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
-
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/" replace />;
-  return <AppLayout>{children}</AppLayout>;
-};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
