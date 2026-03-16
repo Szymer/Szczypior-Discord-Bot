@@ -67,10 +67,10 @@ const ChallengeListView = () => {
 };
 
 const ChallengeDetailView = ({ id }: { id: string }) => {
-  const { user } = useAuth();
+  const user = currentUser;
   const challenge = fitnessChallenges.find(c => c.id === id);
 
-  if (!challenge || !user) {
+  if (!challenge) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Wyzwanie nie znalezione.</p>
