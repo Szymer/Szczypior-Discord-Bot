@@ -1,7 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { fitnessChallenges } from "@/lib/eventsData";
-import { useAuth } from "@/context/AuthContext";
-import { getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
+import { currentUser, getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 import StatCard from "@/components/StatCard";
 import { ArrowLeft, Trophy, Calendar, Target, ChevronRight, Users } from "lucide-react";
 

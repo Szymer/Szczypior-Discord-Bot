@@ -1,14 +1,13 @@
 import { useParams, Link } from "react-router-dom";
 import { useState } from "react";
 import { asgEvents, getEventTypeLabel } from "@/lib/eventsData";
-import { players } from "@/lib/mockData";
-import { useAuth } from "@/context/AuthContext";
+import { currentUser, players } from "@/lib/mockData";
 import { ArrowLeft, MapPin, Users, Calendar, User, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const EventPage = () => {
   const { id } = useParams();
-  const { user } = useAuth();
+  const user = currentUser;
   const event = asgEvents.find(e => e.id === id);
   const [participants, setParticipants] = useState<string[]>(event?.participants || []);
 

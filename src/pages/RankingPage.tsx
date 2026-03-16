@@ -5,7 +5,7 @@ import { ArrowUpDown, Search } from "lucide-react";
 type SortKey = "rank" | "totalPoints" | "totalDistanceKm" | "totalActivities" | "bestPaceMinPerKm";
 
 const RankingPage = () => {
-  const { user } = useAuth();
+  const user = currentUser;
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortAsc, setSortAsc] = useState(true);

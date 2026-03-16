@@ -12,8 +12,7 @@ const COLORS = [
 ];
 
 const StatsPage = () => {
-  const { user } = useAuth();
-  if (!user) return null;
+  const user = currentUser;
 
   const activities = getPlayerActivities(user.id);
   const chartData = getChartData(user.id);
