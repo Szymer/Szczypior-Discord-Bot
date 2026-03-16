@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/auth/supabaseClient";
-import { fetchCurrentUser, DjangoUser } from "@/api/djangoClient";
+import { DjangoApiError, fetchCurrentUser, DjangoUser } from "@/api/djangoClient";
 
 interface AuthUser extends DjangoUser {
   isAdmin: boolean;
@@ -35,8 +35,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     } catch (err) {
       console.error("Failed to fetch Django user:", err);
-      setError("Nie udało się pobrać danych użytkownika");
-      setUser(null);
+
+      if (err instanceof DjangoApiError && (err.status === 401 || err.status === 403)) {
+        setError("Sesja wygasla albo konto nie ma dostepu. Zaloguj sie ponownie.");
+        setUser(null);
+        setSession(null);
+        await supabase.auth.signOut();
+        return;
+      }
+
+      setError("Tymczasowy blad polaczenia z backendem. Sesja zostala zachowana.");
     }
   }, []);
 

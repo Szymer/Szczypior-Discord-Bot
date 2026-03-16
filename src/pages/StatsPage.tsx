@@ -1,4 +1,7 @@
-import { currentUser, getChartData, getActivityDistribution, getPlayerActivities, formatPace, formatDuration } from "@/lib/mockData";
+import { useEffect, useMemo, useState } from "react";
+import { formatPace, formatDuration } from "@/lib/mockData";
+import { djangoFetch } from "@/api/djangoClient";
+import { useAuth } from "@/context/AuthContext";
 import StatCard from "@/components/StatCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 
@@ -11,32 +14,70 @@ const COLORS = [
   "hsl(270 60% 55%)",
 ];
 
+interface StatsSummary {
+  avg5Points: number;
+  bestActivityPoints: number;
+  bestActivityDate: string | null;
+  avgRunningPace: number | null;
+  totalDurationMin: number;
+}
+
+interface WeeklyPoint {
+  name: string;
+  points: number;
+  distance: number;
+}
+
+interface DistributionRow {
+  type: string;
+  label: string;
+  count: number;
+  distance: number;
+  points: number;
+}
+
 const StatsPage = () => {
-  const user = currentUser;
+  const { user } = useAuth();
+  const [summary, setSummary] = useState<StatsSummary | null>(null);
+  const [chartData, setChartData] = useState<WeeklyPoint[]>([]);
+  const [distribution, setDistribution] = useState<DistributionRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const activities = getPlayerActivities(user.id);
-  const chartData = getChartData(user.id);
-  const distribution = getActivityDistribution(user.id);
+  useEffect(() => {
+    Promise.all([
+      djangoFetch<StatsSummary>("/api/stats/summary/"),
+      djangoFetch<WeeklyPoint[]>("/api/stats/weekly/"),
+      djangoFetch<DistributionRow[]>("/api/stats/distribution/"),
+    ])
+      .then(([summaryData, weeklyData, distributionData]) => {
+        setSummary(summaryData);
+        setChartData(weeklyData);
+        setDistribution(distributionData);
+      })
+      .catch(() => setError("Nie udało się pobrać statystyk"))
+      .finally(() => setIsLoading(false));
+  }, []);
 
-  const last5 = activities.slice(0, 5);
-  const avg5Points = last5.length > 0 ? Math.round(last5.reduce((s, a) => s + a.pointsEarned, 0) / last5.length) : 0;
-  const bestActivity = activities.reduce((best, a) => a.pointsEarned > best.pointsEarned ? a : best, activities[0]);
-  const avgPace = activities.filter(a => a.type.startsWith("running")).length > 0
-    ? (activities.filter(a => a.type.startsWith("running")).reduce((s, a) => s + a.paceMinPerKm, 0) / activities.filter(a => a.type.startsWith("running")).length)
-    : 0;
+  const totalPointsFromDistribution = useMemo(
+    () => distribution.reduce((sum, d) => sum + d.points, 0),
+    [distribution]
+  );
 
   return (
     <div className="space-y-6">
       <div className="border-b border-border pb-3">
         <h1 className="text-xl font-bold text-primary tracking-widest">STATYSTYKI SZCZEGÓŁOWE</h1>
-        <p className="text-tactical text-muted-foreground mt-1">// ANALIZA WYNIKÓW — {user.username}</p>
+        <p className="text-tactical text-muted-foreground mt-1">// ANALIZA WYNIKÓW — {user?.username}</p>
+        {isLoading && <p className="text-tactical text-muted-foreground mt-1 animate-pulse">// ŁADOWANIE...</p>}
+        {error && <p className="text-sm text-destructive mt-1">{error}</p>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="ŚR. PKT (5 AKT.)" value={avg5Points} variant="primary" />
-        <StatCard label="NAJLEPSZA AKT." value={bestActivity?.pointsEarned || 0} sub={bestActivity?.date} variant="accent" />
-        <StatCard label="ŚR. TEMPO BIEGU" value={avgPace > 0 ? `${formatPace(avgPace)}/km` : "—"} />
-        <StatCard label="CZAS ŁĄCZNY" value={formatDuration(user.totalDurationMin)} />
+        <StatCard label="ŚR. PKT (5 AKT.)" value={summary?.avg5Points ?? 0} variant="primary" />
+        <StatCard label="NAJLEPSZA AKT." value={summary?.bestActivityPoints ?? 0} sub={summary?.bestActivityDate ?? "—"} variant="accent" />
+        <StatCard label="ŚR. TEMPO BIEGU" value={summary?.avgRunningPace ? `${formatPace(summary.avgRunningPace)}/km` : "—"} />
+        <StatCard label="CZAS ŁĄCZNY" value={formatDuration(summary?.totalDurationMin ?? 0)} />
       </div>
 
       {/* Points per week */}
@@ -97,6 +138,10 @@ const StatsPage = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="text-tactical text-muted-foreground text-right">
+        SUMA PKT (ROZKŁAD): {totalPointsFromDistribution.toLocaleString()}
       </div>
     </div>
   );

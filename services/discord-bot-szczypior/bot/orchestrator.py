@@ -60,9 +60,10 @@ class BotOrchestrator:
         """
         if challenge_id is None and channel_id:
             try:
-                from bot.main import channel_to_challenge as _ch_map
-                challenge_id = _ch_map.get(channel_id)
-            except ImportError:
+                channel_to_challenge = self.get_channel_to_challenge_mapping()
+                challenge_id = channel_to_challenge.get(channel_id)
+            except Exception as e:
+                logger.error("Błąd podczas pobierania mapowania kanałów", exc_info=True)
                 pass
 
         if challenge_id is None:
@@ -1051,9 +1052,10 @@ class BotOrchestrator:
         challenge_id: Optional[int] = None
         if channel_id:
             try:
-                from bot.main import channel_to_challenge as _ch_map
-                challenge_id = _ch_map.get(channel_id)
-            except ImportError:
+                channel_to_challenge = self.get_channel_to_challenge_mapping()
+                challenge_id = channel_to_challenge.get(channel_id)
+            except Exception as e:
+                logger.error("Błąd podczas pobierania mapowania kanałów", exc_info=True)
                 pass
 
         try:
@@ -1568,3 +1570,15 @@ class BotOrchestrator:
         )
         
         return final_prompt
+
+    def get_channel_to_challenge_mapping(self) -> Dict[str, int]:
+        """
+        Funkcja dynamicznie pobiera mapowanie kanałów do wyzwań.
+        Zwraca słownik, gdzie kluczem jest ID kanału, a wartością ID wyzwania.
+        """
+        try:
+            active_challenges = self.api_manager.get_active_challenges()
+            return {ch.discord_channel_id: ch.id for ch in active_challenges}
+        except Exception as e:
+            logger.error("Nie udało się pobrać mapowania kanałów do wyzwań", exc_info=True)
+            return {}

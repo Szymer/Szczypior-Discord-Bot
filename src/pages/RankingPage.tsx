@@ -1,14 +1,38 @@
-import { useState, useMemo } from "react";
-import { currentUser, players, ACTIVITY_CONFIG } from "@/lib/mockData";
+import { useEffect, useMemo, useState } from "react";
+import { ACTIVITY_CONFIG } from "@/lib/mockData";
+import { djangoFetch } from "@/api/djangoClient";
+import { useAuth } from "@/context/AuthContext";
 import { ArrowUpDown, Search } from "lucide-react";
 
 type SortKey = "rank" | "totalPoints" | "totalDistanceKm" | "totalActivities" | "bestPaceMinPerKm";
 
+interface RankingPlayer {
+  id: string;
+  username: string;
+  rank: number;
+  totalPoints: number;
+  pointsDiff: number;
+  totalDistanceKm: number;
+  totalActivities: number;
+  favoriteActivity: keyof typeof ACTIVITY_CONFIG;
+  bestPaceMinPerKm: number | null;
+}
+
 const RankingPage = () => {
-  const user = currentUser;
+  const { user } = useAuth();
+  const [players, setPlayers] = useState<RankingPlayer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortAsc, setSortAsc] = useState(true);
+
+  useEffect(() => {
+    djangoFetch<RankingPlayer[]>("/api/ranking/")
+      .then(setPlayers)
+      .catch(() => setError("Nie udało się pobrać rankingu"))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -32,6 +56,8 @@ const RankingPage = () => {
       <div className="border-b border-border pb-3">
         <h1 className="text-xl font-bold text-primary tracking-widest">TABELA RANKINGOWA</h1>
         <p className="text-tactical text-muted-foreground mt-1">// KLASYFIKACJA GENERALNA — {players.length} OPERATORÓW</p>
+        {isLoading && <p className="text-tactical text-muted-foreground mt-1 animate-pulse">// ŁADOWANIE...</p>}
+        {error && <p className="text-sm text-destructive mt-1">{error}</p>}
       </div>
 
       <div className="relative">
@@ -81,7 +107,7 @@ const RankingPage = () => {
                   <td className="p-3 text-right">{p.totalActivities}</td>
                   <td className="p-3 text-right hidden md:table-cell">{ACTIVITY_CONFIG[p.favoriteActivity].emoji}</td>
                   <td className="p-3 text-right hidden lg:table-cell">
-                    {p.bestPaceMinPerKm > 0 ? `${Math.floor(p.bestPaceMinPerKm)}:${Math.round((p.bestPaceMinPerKm % 1) * 60).toString().padStart(2, "0")}/km` : "—"}
+                    {p.bestPaceMinPerKm && p.bestPaceMinPerKm > 0 ? `${Math.floor(p.bestPaceMinPerKm)}:${Math.round((p.bestPaceMinPerKm % 1) * 60).toString().padStart(2, "0")}/km` : "—"}
                   </td>
                 </tr>
               );

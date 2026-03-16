@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
-import { fitnessChallenges, asgEvents, getEventTypeLabel } from "@/lib/eventsData";
+import { asgEvents, getEventTypeLabel } from "@/lib/eventsData";
 import { CalendarDays, Target, ChevronRight, Users, MapPin } from "lucide-react";
+import { useChallenges } from "@/hooks/useChallenges";
 
 const HomePage = () => {
   const now = new Date().toISOString().split("T")[0];
+  const { challenges, isLoading, error } = useChallenges();
 
   return (
     <div className="space-y-8">
@@ -18,10 +20,14 @@ const HomePage = () => {
         <div className="flex items-center gap-2 border-b border-border pb-3">
           <Target className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold text-primary tracking-widest">WYZWANIA FITNESS</h2>
+          {isLoading && <span className="text-tactical text-muted-foreground ml-auto animate-pulse">ŁADOWANIE...</span>}
         </div>
+        {error && (
+          <p className="text-xs text-muted-foreground">{error}</p>
+        )}
 
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {fitnessChallenges.map(ch => (
+          {challenges.map(ch => (
             <Link
               key={ch.id}
               to={`/challenge/${ch.id}`}

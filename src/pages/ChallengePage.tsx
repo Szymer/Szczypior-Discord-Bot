@@ -1,18 +1,22 @@
 import { useParams, Link } from "react-router-dom";
-import { fitnessChallenges } from "@/lib/eventsData";
-import { currentUser, getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
+import { ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 import StatCard from "@/components/StatCard";
-import { ArrowLeft, Trophy, Calendar, Target, ChevronRight, Users } from "lucide-react";
+import { ArrowLeft, Trophy, Calendar, Target, ChevronRight } from "lucide-react";
+import { useChallenges } from "@/hooks/useChallenges";
+import { useActivities } from "@/hooks/useActivities";
+import { type FitnessChallenge } from "@/lib/eventsData";
 
 const ChallengeListView = () => {
-  const activeChallenges = fitnessChallenges.filter(c => c.isActive);
-  const pastChallenges = fitnessChallenges.filter(c => !c.isActive);
+  const { challenges, isLoading } = useChallenges();
+  const activeChallenges = challenges.filter(c => c.isActive);
+  const pastChallenges = challenges.filter(c => !c.isActive);
 
   return (
     <div className="space-y-6">
       <div className="border-b border-border pb-3">
         <h1 className="text-xl font-bold text-primary tracking-widest">WYZWANIA FITNESS</h1>
         <p className="text-tactical text-muted-foreground mt-1">// WYBIERZ WYZWANIE, ABY ZOBACZYĆ AKTYWNOŚCI UCZESTNIKÓW</p>
+        {isLoading && <span className="text-tactical text-muted-foreground animate-pulse">ŁADOWANIE...</span>}
       </div>
 
       {activeChallenges.length > 0 && (
@@ -67,8 +71,19 @@ const ChallengeListView = () => {
 };
 
 const ChallengeDetailView = ({ id }: { id: string }) => {
-  const user = currentUser;
-  const challenge = fitnessChallenges.find(c => c.id === id);
+  const { challenges, isLoading: loadingChallenges } = useChallenges();
+  const challenge = challenges.find(c => String(c.id) === id) as (FitnessChallenge & { id: number }) | undefined;
+  const { activities: challengeActivities, isLoading: loadingActs } = useActivities({
+    challengeId: challenge?.id,
+  });
+
+  if (loadingChallenges) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!challenge) {
     return (
@@ -79,21 +94,17 @@ const ChallengeDetailView = ({ id }: { id: string }) => {
     );
   }
 
-  const allActivities = getPlayerActivities(user.id);
-  const challengeActivities = allActivities.filter(
-    a => a.date >= challenge.startDate && a.date <= challenge.endDate
-  );
+  const allActivities = challengeActivities;
+  const totalDistance = Math.round(allActivities.reduce((s, a) => s + a.distanceKm, 0) * 10) / 10;
+  const totalPoints = allActivities.reduce((s, a) => s + a.pointsEarned, 0);
+  const totalDuration = allActivities.reduce((s, a) => s + (a.durationMin ?? 0), 0);
+  const activityCount = allActivities.length;
 
-  const totalDistance = Math.round(challengeActivities.reduce((s, a) => s + a.distanceKm, 0) * 10) / 10;
-  const totalPoints = challengeActivities.reduce((s, a) => s + a.pointsEarned, 0);
-  const totalDuration = challengeActivities.reduce((s, a) => s + a.durationMin, 0);
-  const activityCount = challengeActivities.length;
-
-  const runningActs = challengeActivities.filter(a => a.type === "running_terrain" || a.type === "running_treadmill");
-  const bestPace = runningActs.length > 0 ? Math.min(...runningActs.map(a => a.paceMinPerKm)) : 0;
+  const runningActs = allActivities.filter(a => a.type === "running_terrain" || a.type === "running_treadmill");
+  const bestPace = runningActs.length > 0 ? Math.min(...runningActs.map(a => a.paceMinPerKm ?? 999)) : 0;
 
   const typeCounts: Record<string, { count: number; distance: number; points: number }> = {};
-  challengeActivities.forEach(a => {
+  allActivities.forEach(a => {
     if (!typeCounts[a.type]) typeCounts[a.type] = { count: 0, distance: 0, points: 0 };
     typeCounts[a.type].count++;
     typeCounts[a.type].distance += a.distanceKm;
@@ -101,8 +112,8 @@ const ChallengeDetailView = ({ id }: { id: string }) => {
   });
   const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1].points - a[1].points);
 
-  const longestActivity = challengeActivities.length > 0
-    ? challengeActivities.reduce((best, a) => a.distanceKm > best.distanceKm ? a : best)
+  const longestActivity = allActivities.length > 0
+    ? allActivities.reduce((best, a) => a.distanceKm > best.distanceKm ? a : best)
     : null;
 
   return (
@@ -148,10 +159,16 @@ const ChallengeDetailView = ({ id }: { id: string }) => {
       {/* Operator panel */}
       <div className="border-b border-border pb-3">
         <h2 className="text-lg font-bold text-primary tracking-widest">AKTYWNOŚCI UCZESTNIKÓW — {challenge.name.toUpperCase()}</h2>
-        <p className="text-tactical text-muted-foreground mt-1">// DANE {user.username} W OKRESIE WYZWANIA</p>
+        <p className="text-tactical text-muted-foreground mt-1">
+          {loadingActs ? "// ŁADOWANIE..." : `// ${activityCount} AKTYWNOŚCI W BAZIE DANYCH`}
+        </p>
       </div>
 
-      {challengeActivities.length === 0 ? (
+      {loadingActs ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : challengeActivities.length === 0 ? (
         <div className="border border-border bg-card p-8 text-center">
           <p className="text-muted-foreground text-tactical">// BRAK AKTYWNOŚCI W OKRESIE WYZWANIA</p>
           <p className="text-sm text-muted-foreground mt-2">Okres: {challenge.startDate} — {challenge.endDate}</p>
@@ -203,10 +220,10 @@ const ChallengeDetailView = ({ id }: { id: string }) => {
           <div className="border border-border bg-card p-4">
             <p className="text-tactical text-muted-foreground mb-3">// AKTYWNOŚCI W OKRESIE WYZWANIA</p>
             <div className="space-y-2">
-              {challengeActivities.slice(0, 10).map(act => (
+              {allActivities.map(act => (
                 <div key={act.id} className="flex items-center gap-4 text-sm border-b border-border/50 pb-2 last:border-0">
                   <span className="text-lg">{ACTIVITY_CONFIG[act.type].emoji}</span>
-                  <span className="text-muted-foreground w-20">{act.date}</span>
+                  <span className="text-muted-foreground w-29">{act.date}</span>
                   <span className="text-foreground flex-1">{ACTIVITY_CONFIG[act.type].label}</span>
                   <span className="text-foreground font-bold">{act.distanceKm} km</span>
                   <span className="text-muted-foreground">{formatPace(act.paceMinPerKm)}/km</span>

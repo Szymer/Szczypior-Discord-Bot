@@ -1,17 +1,26 @@
-import { currentUser, getPlayerActivities, ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
+import { ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
+import { useActivities } from "@/hooks/useActivities";
+import { useAuth } from "@/context/AuthContext";
 
 const HistoryPage = () => {
-  const user = currentUser;
-  const activities = getPlayerActivities(user.id);
+  const { user } = useAuth();
+  const { activities, isLoading } = useActivities({ userId: user?.discord_id });
 
   return (
     <div className="space-y-4">
       <div className="border-b border-border pb-3">
         <h1 className="text-xl font-bold text-primary tracking-widest">HISTORIA AKTYWNOŚCI</h1>
-        <p className="text-tactical text-muted-foreground mt-1">// REJESTR AKTYWNOŚCI — {user.username} — {activities.length} WPISÓW</p>
+        <p className="text-tactical text-muted-foreground mt-1">
+          {isLoading ? "// ŁADOWANIE..." : `// REJESTR AKTYWNOŚCI — ${user?.username ?? ""} — ${activities.length} WPISÓW`}
+        </p>
       </div>
 
-      <div className="border border-border overflow-x-auto">
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="border border-border overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/50">
@@ -48,7 +57,8 @@ const HistoryPage = () => {
             })}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
     </div>
   );
 };

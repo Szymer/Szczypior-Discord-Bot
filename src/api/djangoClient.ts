@@ -6,6 +6,16 @@ if (!DJANGO_API_URL) {
   throw new Error("Missing VITE_DJANGO_API_URL environment variable");
 }
 
+export class DjangoApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "DjangoApiError";
+    this.status = status;
+  }
+}
+
 export interface DjangoUser {
   id: number;
   discord_id: string;
@@ -26,7 +36,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 export async function fetchCurrentUser(): Promise<DjangoUser> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${DJANGO_API_URL}/api/auth/me/`, { headers });
-  if (!res.ok) throw new Error(`Django API error: ${res.status}`);
+  if (!res.ok) throw new DjangoApiError(`Django API error: ${res.status}`, res.status);
   return res.json();
 }
 
@@ -39,6 +49,6 @@ export async function djangoFetch<T = unknown>(
     ...options,
     headers: { ...headers, ...options.headers },
   });
-  if (!res.ok) throw new Error(`Django API error: ${res.status}`);
+  if (!res.ok) throw new DjangoApiError(`Django API error: ${res.status}`, res.status);
   return res.json();
 }
