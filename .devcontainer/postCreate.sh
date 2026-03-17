@@ -3,8 +3,12 @@ set -eu
 
 cd /workspaces/Szczypior-Discord-Bot
 
-python -m pip install --upgrade pip
-python -m pip install -r services/discord-bot-szczypior/requirements.txt
-python -m pip install -r services/db-service/requirements.txt
+echo "[postCreate] Python dependencies installed at build time."
 
-echo "Devcontainer setup complete."
+echo "[postCreate] Instaluję zależności npm (React/Vite)..."
+cd services/web-dashboard/react && npm install
+
+cd /workspaces/Szczypior-Discord-Bot
+chmod +x scripts/dev-start.sh
+
+echo "[postCreate] Setup zakończony."

@@ -39,7 +39,7 @@ const HomePage = () => {
                 <span className="text-xl">{ch.emoji}</span>
                 <h3 className="font-bold text-foreground group-hover:text-primary transition-colors">{ch.name}</h3>
                 {ch.isActive && (
-                  <span className="ml-auto text-tactical bg-primary/20 text-primary px-2 py-0.5">AKTYWNE</span>
+                  <span className="ml-auto text-tactical bg-primary/20 text-primary px-2 py-0.5">AKTYWNY</span>
                 )}
               </div>
               <p className="text-sm text-muted-foreground mb-3">{ch.description}</p>
@@ -47,7 +47,7 @@ const HomePage = () => {
                 <span className="text-muted-foreground">
                   {ch.startDate.slice(5)} → {ch.endDate.slice(5)}
                 </span>
-                <span className="text-primary font-bold">+{ch.bonusPoints.toLocaleString()} pkt</span>
+                <span className="text-primary font-bold"></span>
               </div>
               <div className="flex items-center gap-1 mt-2 text-muted-foreground text-tactical group-hover:text-primary transition-colors">
                 SZCZEGÓŁY <ChevronRight className="w-3 h-3" />

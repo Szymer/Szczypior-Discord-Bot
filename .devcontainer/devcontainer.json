@@ -13,10 +13,11 @@
   "forwardPorts": [
     8001,
     8000,
+    8080,
     3000
   ],
   "runServices": [
-    "db-service"
+    "workspace"
   ],
   "customizations": {
     "vscode": {
@@ -34,6 +35,7 @@
       ]
     }
   },
-  "postCreateCommand": "apt-get update && apt-get install -y nodejs npm && pip install -r services/db-service/requirements.txt && pip install -r services/discord-bot-szczypior/requirements.txt && pip install -r services/web-dashboard/requirements.txt",
+  "postCreateCommand": ".devcontainer/postCreate.sh",
+  "postStartCommand": "bash scripts/dev-start.sh",
   "remoteUser": "root"
 }

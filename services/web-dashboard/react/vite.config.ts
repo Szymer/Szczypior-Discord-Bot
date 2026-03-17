@@ -6,16 +6,14 @@ import { componentTagger } from "lovable-tagger";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
-    host: "::",
+    host: "0.0.0.0",
     port: 8080,
-    hmr: {
-      overlay: false,
+    watch: {
+      usePolling: true, // Kluczowa zmiana dla auto-refresh w Dockerze
+      interval: 100,    // Opcjonalnie: częstotliwość sprawdzania zmian (ms)
     },
-    proxy: {
-      "/api": {
-        target: "http://localhost:8001",
-        changeOrigin: true,
-      },
+    hmr: {
+      clientPort: 8080,
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

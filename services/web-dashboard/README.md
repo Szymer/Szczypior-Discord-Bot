@@ -52,7 +52,7 @@ docker compose -f .devcontainer/docker-compose.dev.yml --profile dashboard up --
 W drugim terminalu uruchom React:
 
 ```sh
-cd /workspaces/Szczypior-Discord-Bot
+cd services/web-dashboard/react
 npm ci
 export VITE_DJANGO_API_URL=http://localhost:8001
 npm run dev -- --host 0.0.0.0 --port 8080
@@ -61,7 +61,7 @@ npm run dev -- --host 0.0.0.0 --port 8080
 Jeśli `npm ci` było już wykonane wcześniej:
 
 ```sh
-cd /workspaces/Szczypior-Discord-Bot
+cd services/web-dashboard/react
 VITE_DJANGO_API_URL=http://localhost:8001 npm run dev -- --host 0.0.0.0 --port 8080
 ```
 
