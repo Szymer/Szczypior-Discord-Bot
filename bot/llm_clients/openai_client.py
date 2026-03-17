@@ -1,7 +1,7 @@
 # bot/llm_clients/openai_client.py
 from typing import Any, Dict, Optional
 
-from .base_client import BaseLLMClient
+from llm_clients.base_client import BaseLLMClient
 
 
 class OpenAIClient(BaseLLMClient):

@@ -17,5 +17,9 @@ else
     echo "⚠️  GOOGLE_SHEETS_SPREADSHEET_ID not set"
 fi
 
+# Debugowanie PYTHONPATH
+echo "PYTHONPATH: $PYTHONPATH"
+ls /app
+
 # Uruchom bota
-python -m bot.main
+python -m main

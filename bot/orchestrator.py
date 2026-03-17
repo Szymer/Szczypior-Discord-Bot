@@ -8,16 +8,16 @@ from typing import Any, Dict, List, Optional
 
 import discord
 
-from .config_manager import config_manager
-from .constants import ACTIVITY_TYPES
-from .exceptions import (
+from config_manager import config_manager
+from constants import ACTIVITY_TYPES
+from exceptions import (
     ActivityValidationError,
     ConfigurationError,
     DuplicateActivityError,
     LLMAnalysisError,
     LLMTimeoutError,
 )
-from .utils import get_display_name, parse_distance
+from utils import get_display_name, parse_distance
 
 logger = logging.getLogger(__name__)
 

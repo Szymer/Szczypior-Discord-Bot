@@ -2,7 +2,7 @@
 import os
 from typing import Optional, Type
 
-from ..config_manager import config_manager
+from config_manager import config_manager
 from .anthropic_client import AnthropicClient
 from .base_client import BaseLLMClient
 from .gemini_client import GeminiClient

@@ -10,7 +10,7 @@ import requests
 from dotenv import load_dotenv
 from PIL import Image
 
-from .base_client import BaseLLMClient
+from llm_clients.base_client import BaseLLMClient
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
@@ -43,7 +43,7 @@ class GeminiClient(BaseLLMClient):
 
         # Ustaw domyślny model jeśli nie podano
         if not self.model_name:
-            self.model_name = "models/gemini-2.5-flash-lite"
+            self.model_name = "models/gemini-3.1-flash-lite-preview"
 
         # Zapisz parametry generowania
         self.generation_params = generation_params or {}

@@ -34,19 +34,19 @@ class ConfigManager:
     def _load_config(self) -> Dict[str, Any]:
         """Wczytuje plik konfiguracyjny JSON."""
         try:
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-            abs_config_path = os.path.join(project_root, self.config_path)
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            abs_config_path = os.path.join(base_dir, self.config_path)
 
             with open(abs_config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
 
-            # Waliduj konfiguracj\u0119
+            # Waliduj konfigurację
             self._validate_config(config)
             return config
 
         except FileNotFoundError as exc:
             raise FileNotFoundError(
-                f"Plik konfiguracyjny '{abs_config_path}' nie zosta\u0142 znaleziony."
+                f"Plik konfiguracyjny '{abs_config_path}' nie został znaleziony."
             ) from exc
         except json.JSONDecodeError as exc:
             raise ValueError(
@@ -54,23 +54,23 @@ class ConfigManager:
             ) from exc
 
     def _validate_config(self, config: Dict[str, Any]) -> None:
-        """Waliduje struktur\u0119 konfiguracji."""
+        """Waliduje strukturę konfiguracji."""
         required_keys = ["activity_keywords", "llm_providers"]
 
         for key in required_keys:
             if key not in config:
                 raise ValueError(f"Brak wymaganego klucza '{key}' w config.json")
 
-        # Sprawd\u017a czy s\u0105 skonfigurowane przynajmniej jedne LLM providers
+        # Sprawdź czy są skonfigurowane przynajmniej jedne LLM providers
         if not config["llm_providers"]:
             raise ValueError("Brak konfiguracji LLM providers w config.json")
 
-        # Sprawd\u017a czy domy\u015blny provider istnieje
+        # Sprawdź czy domyślny provider istnieje
         default_provider = os.getenv("LLM_PROVIDER", "gemini").lower()
         if default_provider not in config["llm_providers"]:
             raise ValueError(
-                f"Domy\u015blny provider '{default_provider}' nie jest skonfigurowany w config.json. "
-                f"Dost\u0119pni providerzy: {list(config['llm_providers'].keys())}"
+                f"Domyślny provider '{default_provider}' nie jest skonfigurowany w config.json. "
+                f"Dostępni providerzy: {list(config['llm_providers'].keys())}"
             )
 
     def get_llm_provider(self) -> str:

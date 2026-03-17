@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import gspread
 from google.oauth2.service_account import Credentials
 
-from .utils import parse_distance
+from utils import parse_distance
 
 logger = logging.getLogger(__name__)
 

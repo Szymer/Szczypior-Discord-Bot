@@ -11,11 +11,11 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from .sheets_manager import SheetsManager
-from .llm_clients import get_llm_client
-from .orchestrator import BotOrchestrator
-from .constants import ACTIVITY_TYPES
-from .utils import (
+from sheets_manager import SheetsManager
+from llm_clients import get_llm_client
+from orchestrator import BotOrchestrator
+from constants import ACTIVITY_TYPES
+from utils import (
     get_display_name, 
     create_embed, 
     create_activity_embed,
@@ -24,7 +24,7 @@ from .utils import (
     aggregate_by_field,
     calculate_user_totals
 )
-from .exceptions import ConfigurationError, SheetsError, LLMError
+from exceptions import ConfigurationError, SheetsError, LLMError
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
@@ -709,7 +709,7 @@ async def podsumowanie(
             name="📈 Łączne statystyki",
             value=(
                 f"Aktywności: **{stats['total_activities']}**\n"
-                f"Dystans: **{stats['total_distance']:.1f} km**\n"
+                f"Dystans: **{stats['total_distance']:.1f}** km\n"
                 f"Punkty: **{stats['total_points']}**"
             ),
             inline=False
