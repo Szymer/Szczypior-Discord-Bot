@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from PIL import Image
 
 from .base_client import BaseLLMClient
+from .rate_limiter import ModelRateLimiter
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
@@ -20,13 +21,17 @@ load_dotenv()
 class GeminiClient(BaseLLMClient):
     """Klient do komunikacji z Google Gemini AI."""
 
-    _MODEL_ALIASES = {
-        "gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
-        "gemini-3.1-flash": "gemini-3.1-flash",
-        "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
-        "gemini-2.5-flash": "gemini-2.5-flash",
-        "gemini-2.0-flash-exp": "gemini-2.0-flash-exp",
-    }
+
+
+    _DEFAULT_MODEL = "models/gemini-3.1-flash-lite"
+
+    @staticmethod
+    def _parse_model_list(raw: str) -> list[str]:
+        """Parsuje listę modeli z formatu '[model1, model2]' lub 'model1, model2'."""
+        raw = raw.strip()
+        if raw.startswith("[") and raw.endswith("]"):
+            raw = raw[1:-1]
+        return [item.strip() for item in raw.split(",") if item.strip()]
 
     def __init__(
         self,
@@ -53,15 +58,32 @@ class GeminiClient(BaseLLMClient):
 
         # Ustaw domyślny model jeśli nie podano
         if not self.model_name:
-            self.model_name = "models/gemini-3.1-flash-lite"
+            google_models_raw = os.getenv("GOOGLE_MODELS", "").strip()
+            if google_models_raw:
+                models = self._parse_model_list(google_models_raw)
+                self.model_name = models[0] if models else self._DEFAULT_MODEL
+            else:
+                self.model_name = self._DEFAULT_MODEL
 
         self.model_name = self._normalize_model_name(self.model_name)
 
         # Zapisz parametry generowania
         self.generation_params = generation_params or {}
 
+        # Rate limiter — czyta GOOGLE_RPM z env
+        self._rate_limiter = ModelRateLimiter.from_env()
+
     def _fallback_models(self) -> list[str]:
         """Zwraca listę modeli fallback używanych gdy bazowy model jest niedostępny."""
+        google_models_raw = os.getenv("GOOGLE_MODELS", "").strip()
+        if google_models_raw:
+            all_models = [
+                self._normalize_model_name(m)
+                for m in self._parse_model_list(google_models_raw)
+            ]
+            # Opuść pierwszy model (primary) — reszta to fallbacki
+            return [m for m in all_models[1:] if m != self.model_name]
+
         env_raw = os.getenv("GEMINI_FALLBACK_MODELS", "").strip()
         if env_raw:
             return [self._normalize_model_name(item) for item in env_raw.split(",") if item.strip()]
@@ -73,13 +95,17 @@ class GeminiClient(BaseLLMClient):
 
     @staticmethod
     def _should_try_fallback(exc: Exception) -> bool:
-        """Sprawdza czy błąd wskazuje na niedostępny lub niewspierany model."""
+        """Sprawdza czy błąd wskazuje na niedostępny, niewspierany model lub wyczerpanie kwoty."""
         message = str(exc).lower()
         return (
             "not_found" in message
             or "is not found" in message
             or "not supported for generatecontent" in message
             or "unexpected model name format" in message
+            or "resource_exhausted" in message
+            or "quota exceeded" in message
+            or "rate limit" in message
+            or "429" in message
         )
 
     def _generate_content_with_fallback(
@@ -88,15 +114,32 @@ class GeminiClient(BaseLLMClient):
         contents: Any,
         config: Optional[genai_types.GenerateContentConfig] = None,
     ):
-        """Wysyła request do Gemini i automatycznie fallbackuje model, gdy obecny jest niedostępny."""
+        """Wysyła request do Gemini z automatycznym fallbackiem modelu.
+
+        Kolejność prób:
+        1. Jeśli model osiągnął limit RPM — natychmiast skocz do następnego.
+        2. Jeśli API zwróciło błąd kwalifikujący się do fallbacku — skocz do następnego.
+        3. Gdy wszystkie modele wyczerpane (RPM lub błędy) — rzuć wyjątek.
+        """
         candidates: list[str] = [self.model_name]
         for candidate in self._fallback_models():
             if candidate not in candidates:
                 candidates.append(candidate)
 
         last_exc: Optional[Exception] = None
+        rpm_skipped: list[str] = []
 
         for idx, candidate_model in enumerate(candidates):
+            # Sprawdź limit RPM — bez blokowania, od razu fallback
+            if not self._rate_limiter.try_acquire(candidate_model):
+                rpm = self._rate_limiter.get_rpm_limit(candidate_model)
+                print(
+                    f"⏭️ RPM limit ({rpm}/min) dla {candidate_model} wyczerpany. "
+                    f"Przeskakuję na kolejny model."
+                )
+                rpm_skipped.append(candidate_model)
+                continue
+
             try:
                 response = self.client.models.generate_content(
                     model=candidate_model,
@@ -117,6 +160,11 @@ class GeminiClient(BaseLLMClient):
                 if not has_next or not self._should_try_fallback(exc):
                     raise
 
+        if rpm_skipped and last_exc is None:
+            raise RuntimeError(
+                f"Wszystkie modele wyczerpały limit RPM: {rpm_skipped}. Spróbuj ponownie za chwilę."
+            )
+
         if last_exc:
             raise last_exc
 
@@ -127,7 +175,7 @@ class GeminiClient(BaseLLMClient):
         """Normalizuje nazwę modelu do formatu oczekiwanego przez Gemini API."""
         raw = (model_name or "").strip()
         if not raw:
-            return "models/gemini-3.1-flash-lite"
+            return cls._DEFAULT_MODEL
 
         raw = raw.replace("_", "-")
         if raw.lower().startswith("models/"):
@@ -136,8 +184,7 @@ class GeminiClient(BaseLLMClient):
             core = raw
 
         slug = core.strip().lower().replace(" ", "-")
-        canonical = cls._MODEL_ALIASES.get(slug, slug)
-        return f"models/{canonical}"
+        return f"models/{slug}"
 
     def _build_generation_config(
         self,

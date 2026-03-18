@@ -13,6 +13,7 @@ services:
     environment:
       DB_SERVICE_BASE_URL: http://db-service:80
     dns:
+      - 127.0.0.11
       - 8.8.8.8
       - 8.8.4.4
     networks:
@@ -27,6 +28,8 @@ services:
     volumes:
       - ../services/db-service/app:/code/app:cached
     command: uvicorn app.main:app --host 0.0.0.0 --port 80 --reload
+    ports:
+    - "8080:80"
     networks:
       - szczypior-network
     profiles: [ "api" ]
@@ -62,4 +65,5 @@ services:
 
 networks:
   szczypior-network:
-    driver: bridge
+    external: true
+    name: szczypior-dev

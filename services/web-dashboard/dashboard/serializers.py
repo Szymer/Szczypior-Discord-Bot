@@ -2,60 +2,88 @@ from rest_framework import serializers
 from django.conf import settings
 from .models import Activity, DiscordUser, Challenge, SpecialMission, AirsoftEvent
 
+
 class ChallengeSerializer(serializers.ModelSerializer):
-    startDate = serializers.DateTimeField(source='start_date', format='%Y-%m-%d')
-    endDate = serializers.DateTimeField(source='end_date', format='%Y-%m-%d')
-    isActive = serializers.BooleanField(source='is_active')
+    startDate = serializers.DateTimeField(source="start_date", format="%Y-%m-%d")
+    endDate = serializers.DateTimeField(source="end_date", format="%Y-%m-%d")
+    isActive = serializers.BooleanField(source="is_active")
     emoji = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
     bonusPoints = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
-        fields = ['id', 'name', 'description', 'emoji', 'startDate', 'endDate', 'goal', 'bonusPoints', 'isActive']
+        fields = [
+            "id",
+            "name",
+            "description",
+            "emoji",
+            "startDate",
+            "endDate",
+            "goal",
+            "bonusPoints",
+            "isActive",
+        ]
 
     def get_emoji(self, obj):
-        return (obj.rules or {}).get('emoji', '🏆')
+        return (obj.rules or {}).get("emoji", "🏆")
 
     def get_goal(self, obj):
-        return (obj.rules or {}).get('goal', '')
+        return (obj.rules or {}).get("goal", "")
 
     def get_bonusPoints(self, obj):
-        return (obj.rules or {}).get('bonus_points', 0)
+        return (obj.rules or {}).get("bonus_points", 0)
+
 
 class ActivitySerializer(serializers.ModelSerializer):
     type = serializers.SerializerMethodField()
-    userId = serializers.ReadOnlyField(source='user.discord_id')
-    distanceKm = serializers.FloatField(source='distance_km')
-    loadKg = serializers.FloatField(source='weight_kg')
-    elevationGain = serializers.IntegerField(source='elevation_m')
-    durationMin = serializers.IntegerField(source='time_minutes')
-    paceMinPerKm = serializers.SerializerMethodField(method_name='get_paceMinPerKm')
-    heartRateAvg = serializers.IntegerField(source='heart_rate_avg')
-    pointsEarned = serializers.IntegerField(source='total_points')
-    basePoints = serializers.IntegerField(source='base_points')
-    bonusPoints = serializers.SerializerMethodField(method_name='get_bonus_points')
+    userId = serializers.ReadOnlyField(source="user.discord_id")
+    distanceKm = serializers.FloatField(source="distance_km")
+    loadKg = serializers.FloatField(source="weight_kg")
+    elevationGain = serializers.IntegerField(source="elevation_m")
+    durationMin = serializers.IntegerField(source="time_minutes")
+    paceMinPerKm = serializers.SerializerMethodField(method_name="get_paceMinPerKm")
+    heartRateAvg = serializers.IntegerField(source="heart_rate_avg")
+    pointsEarned = serializers.IntegerField(source="total_points")
+    basePoints = serializers.IntegerField(source="base_points")
+    bonusPoints = serializers.SerializerMethodField(method_name="get_bonus_points")
     date = serializers.SerializerMethodField()
-    challengeId = serializers.IntegerField(source='challenge_id')
+    challengeId = serializers.IntegerField(source="challenge_id")
 
     class Meta:
         model = Activity
         fields = [
-            'id', 'userId', 'type', 'date', 'distanceKm', 'loadKg',
-            'elevationGain', 'durationMin', 'paceMinPerKm', 'heartRateAvg',
-            'calories', 'pointsEarned', 'basePoints', 'bonusPoints',
-            'ai_comment', 'challengeId',
+            "id",
+            "userId",
+            "type",
+            "date",
+            "distanceKm",
+            "loadKg",
+            "elevationGain",
+            "durationMin",
+            "paceMinPerKm",
+            "heartRateAvg",
+            "calories",
+            "pointsEarned",
+            "basePoints",
+            "bonusPoints",
+            "ai_comment",
+            "challengeId",
         ]
 
     def get_type(self, obj):
-        mapping = getattr(settings, 'ACTIVITY_MAP', {})
+        mapping = getattr(settings, "ACTIVITY_MAP", {})
         return mapping.get(obj.activity_type, obj.activity_type)
 
     def get_date(self, obj):
         return obj.created_at.strftime("%Y-%m-%d")
 
     def get_bonus_points(self, obj):
-        return obj.weight_bonus_points + obj.elevation_bonus_points + obj.mission_bonus_points
+        return (
+            obj.weight_bonus_points
+            + obj.elevation_bonus_points
+            + obj.mission_bonus_points
+        )
 
     def get_paceMinPerKm(self, obj):
         if not obj.pace:
@@ -67,9 +95,10 @@ class ActivitySerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
+
 class PlayerSerializer(serializers.ModelSerializer):
-    id = serializers.CharField(source='discord_id')
-    username = serializers.CharField(source='display_name')
+    id = serializers.CharField(source="discord_id")
+    username = serializers.CharField(source="display_name")
     totalPoints = serializers.SerializerMethodField()
     totalDistanceKm = serializers.SerializerMethodField()
     totalActivities = serializers.SerializerMethodField()
@@ -84,13 +113,27 @@ class PlayerSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiscordUser
         fields = [
-            'id', 'username', 'avatar_url',
-            'totalPoints', 'totalDistanceKm', 'totalActivities', 'totalDurationMin',
-            'favoriteActivity', 'runningKm', 'swimmingKm', 'cyclingKm', 'walkingKm', 'otherKm',
+            "id",
+            "username",
+            "avatar_url",
+            "totalPoints",
+            "totalDistanceKm",
+            "totalActivities",
+            "totalDurationMin",
+            "favoriteActivity",
+            "runningKm",
+            "swimmingKm",
+            "cyclingKm",
+            "walkingKm",
+            "otherKm",
         ]
 
     def _acts(self, obj):
-        return list(obj.activity_set.all())
+        acts = obj.activity_set.all()
+        challenge_id = self.context.get("challenge_id")
+        if challenge_id is not None:
+            acts = acts.filter(challenge_id=challenge_id)
+        return list(acts)
 
     def get_totalPoints(self, obj):
         return sum(a.total_points for a in self._acts(obj))
@@ -105,42 +148,65 @@ class PlayerSerializer(serializers.ModelSerializer):
         return sum(a.time_minutes or 0 for a in self._acts(obj))
 
     def get_favoriteActivity(self, obj):
-        mapping = getattr(settings, 'ACTIVITY_MAP', {})
+        mapping = getattr(settings, "ACTIVITY_MAP", {})
         acts = self._acts(obj)
         if not acts:
-            return 'running_terrain'
+            return "running_terrain"
         from collections import Counter
+
         most_common = Counter(a.activity_type for a in acts).most_common(1)[0][0]
         return mapping.get(most_common, most_common)
 
     def _km_for_types(self, obj, db_types):
-        return round(float(sum(
-            a.distance_km for a in self._acts(obj) if a.activity_type in db_types
-        )), 2)
+        return round(
+            float(
+                sum(
+                    a.distance_km
+                    for a in self._acts(obj)
+                    if a.activity_type in db_types
+                )
+            ),
+            2,
+        )
 
     def get_runningKm(self, obj):
-        return self._km_for_types(obj, ['bieganie_teren', 'bieganie_bieznia'])
+        return self._km_for_types(obj, ["bieganie_teren", "bieganie_bieznia"])
 
     def get_swimmingKm(self, obj):
-        return self._km_for_types(obj, ['plywanie'])
+        return self._km_for_types(obj, ["plywanie"])
 
     def get_cyclingKm(self, obj):
-        return self._km_for_types(obj, ['rower'])
+        return self._km_for_types(obj, ["rower"])
 
     def get_walkingKm(self, obj):
-        return self._km_for_types(obj, ['spacer'])
+        return self._km_for_types(obj, ["spacer"])
 
     def get_otherKm(self, obj):
-        return self._km_for_types(obj, ['cardio'])
+        return self._km_for_types(obj, ["cardio"])
 
 
 class PlayerRankingSerializer(PlayerSerializer):
-    rank = serializers.IntegerField()
-    pointsDiff = serializers.IntegerField()
+    rank = serializers.SerializerMethodField()
+    pointsDiff = serializers.SerializerMethodField()
+    bestPaceMinPerKm = serializers.SerializerMethodField()
+
+    def get_rank(self, obj):
+        return None
+
+    def get_pointsDiff(self, obj):
+        return None
+
+    def get_bestPaceMinPerKm(self, obj):
+        return None
+
     bestPaceMinPerKm = serializers.FloatField(allow_null=True)
 
     class Meta(PlayerSerializer.Meta):
-        fields = PlayerSerializer.Meta.fields + ['rank', 'pointsDiff', 'bestPaceMinPerKm']
+        fields = PlayerSerializer.Meta.fields + [
+            "rank",
+            "pointsDiff",
+            "bestPaceMinPerKm",
+        ]
 
 
 class StatsSummarySerializer(serializers.Serializer):
@@ -167,7 +233,7 @@ class ActivityDistributionSerializer(serializers.Serializer):
 
 class AsgEventSerializer(serializers.ModelSerializer):
     date = serializers.SerializerMethodField()
-    type = serializers.CharField(source='event_type')
+    type = serializers.CharField(source="event_type")
     maxParticipants = serializers.SerializerMethodField()
     participants = serializers.SerializerMethodField()
     emoji = serializers.SerializerMethodField()
@@ -175,46 +241,66 @@ class AsgEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = AirsoftEvent
         fields = [
-            'id', 'name', 'date', 'location', 'description', 'organizer',
-            'maxParticipants', 'participants', 'type', 'emoji',
+            "id",
+            "name",
+            "date",
+            "location",
+            "description",
+            "organizer",
+            "maxParticipants",
+            "participants",
+            "type",
+            "emoji",
         ]
 
     def get_date(self, obj):
-        return obj.start_date.strftime('%Y-%m-%d')
+        return obj.start_date.strftime("%Y-%m-%d")
 
     def get_maxParticipants(self, obj):
         return None
 
     def get_participants(self, obj):
-        return [p.user.discord_id for p in obj.registrations.select_related('user').all()]
+        return [
+            p.user.discord_id for p in obj.registrations.select_related("user").all()
+        ]
 
     def get_emoji(self, obj):
         return {
-            'milsim': '🎖️',
-            'cqb': '🏢',
-            'woodland': '🌲',
-            'scenario': '📜',
-            'other': '🔫',
-        }.get(obj.event_type, '🔫')
+            "milsim": "🎖️",
+            "cqb": "🏢",
+            "woodland": "🌲",
+            "scenario": "📜",
+            "other": "🔫",
+        }.get(obj.event_type, "🔫")
 
 
 class ChallengeAdminSerializer(serializers.ModelSerializer):
-    startDate = serializers.DateTimeField(source='start_date', format='%Y-%m-%d')
-    endDate = serializers.DateTimeField(source='end_date', format='%Y-%m-%d')
-    isActive = serializers.BooleanField(source='is_active')
+    startDate = serializers.DateTimeField(source="start_date", format="%Y-%m-%d")
+    endDate = serializers.DateTimeField(source="end_date", format="%Y-%m-%d")
+    isActive = serializers.BooleanField(source="is_active")
     emoji = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
     bonusPoints = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
-        fields = ['id', 'name', 'description', 'emoji', 'startDate', 'endDate', 'goal', 'bonusPoints', 'isActive']
+        fields = [
+            "id",
+            "name",
+            "description",
+            "emoji",
+            "startDate",
+            "endDate",
+            "goal",
+            "bonusPoints",
+            "isActive",
+        ]
 
     def get_emoji(self, obj):
-        return (obj.rules or {}).get('emoji', '🏆')
+        return (obj.rules or {}).get("emoji", "🏆")
 
     def get_goal(self, obj):
-        return (obj.rules or {}).get('goal', '')
+        return (obj.rules or {}).get("goal", "")
 
     def get_bonusPoints(self, obj):
-        return (obj.rules or {}).get('bonus_points', 0)
+        return (obj.rules or {}).get("bonus_points", 0)
