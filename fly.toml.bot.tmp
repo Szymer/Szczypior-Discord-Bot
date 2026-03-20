@@ -3,7 +3,7 @@ app = 'szczypior-discord-bot-1-0'
 primary_region = 'fra'
 
 [build]
-  dockerfile = "../../infrastructure/docker/discord-bot.Dockerfile"
+  dockerfile = "infrastructure/docker/discord-bot.Dockerfile"
 
 # Discord bot nie potrzebuje HTTP service, działa jako long-running process
 # Zakomentowane http_service - bot działa w tle
