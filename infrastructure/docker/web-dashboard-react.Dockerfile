@@ -10,14 +10,9 @@ ENV VITE_APP_ENV=production
 
 RUN npm ci --include=dev
 
-RUN npm run build 2>&1
-
-
-# Skopiuj całość frontendu
 COPY services/web-dashboard/react /app
 
-# Zbuduj frontend
-RUN npm run build
+RUN npm run build 2>&1
 
 # Stage drugi – serwer statycznych plików (nginx)
 FROM nginx:stable-alpine AS production
