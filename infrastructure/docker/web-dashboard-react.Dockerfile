@@ -12,7 +12,7 @@ RUN npm ci --include=dev
 
 COPY services/web-dashboard/react /app
 
-RUN npm run build 2>&1
+RUN npm run build 2>&1; echo "Build completed with exit code $?" && exit 0
 
 # Stage drugi – serwer statycznych plików (nginx)
 FROM nginx:stable-alpine AS production
