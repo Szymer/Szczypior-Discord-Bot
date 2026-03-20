@@ -13,13 +13,11 @@ COPY libs ./web-dashboard/libs
 # Zmień workdir do katalogu projektu dla uv sync
 WORKDIR /app/web-dashboard
 
-RUN --mount=type=cache,id=web-dashboard-uv,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev
 
 COPY services/web-dashboard /app/web-dashboard
 
-RUN --mount=type=cache,id=web-dashboard-uv,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 # Add system deps (libpq, gcc) – tu już w build
 RUN apt-get update && apt-get install -y \
