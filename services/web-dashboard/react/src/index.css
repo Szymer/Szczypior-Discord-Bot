@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 7%;
+    --foreground: 45 10% 85%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 45 10% 85%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 45 10% 85%;
+
+    --primary: 45 100% 50%;
+    --primary-foreground: 220 20% 7%;
+
+    --secondary: 220 15% 15%;
+    --secondary-foreground: 45 10% 85%;
+
+    --muted: 220 15% 13%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 142 60% 40%;
+    --accent-foreground: 220 20% 7%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 45 10% 85%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 15%;
+    --ring: 45 100% 50%;
+
+    --radius: 0.25rem;
+
+    --sidebar-background: 220 18% 8%;
+    --sidebar-foreground: 45 10% 85%;
+    --sidebar-primary: 45 100% 50%;
+    --sidebar-primary-foreground: 220 20% 7%;
+    --sidebar-accent: 220 15% 13%;
+    --sidebar-accent-foreground: 45 10% 85%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 45 100% 50%;
+
+    --success: 142 60% 40%;
+    --warning: 45 100% 50%;
+    --danger: 0 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-mono;
+  }
+}
+
+@layer utilities {
+  .glow-amber {
+    box-shadow: 0 0 15px hsl(45 100% 50% / 0.15), 0 0 30px hsl(45 100% 50% / 0.05);
+  }
+  .glow-green {
+    box-shadow: 0 0 10px hsl(142 60% 40% / 0.2);
+  }
+  .border-glow {
+    border-color: hsl(45 100% 50% / 0.3);
+  }
+  .text-tactical {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+}

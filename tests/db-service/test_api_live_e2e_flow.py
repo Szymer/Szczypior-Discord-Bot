@@ -31,11 +31,16 @@ import pytest
 
 BASE_URL = os.getenv("DB_SERVICE_BASE_URL", "http://127.0.0.1:8000")
 API_BASE = f"{BASE_URL}/api/v1"
+API_KEY_HEADER = os.getenv("DB_SERVICE_API_KEY_HEADER", "X-API-Key")
+API_KEY_VALUE = os.getenv("DB_SERVICE_API_KEY", "")
 
 
 def _api_request(method: str, path: str, payload: dict | None = None) -> tuple[int, dict | list | None]:
     data = None
     headers: dict[str, str] = {}
+
+    if API_KEY_VALUE:
+        headers[API_KEY_HEADER] = API_KEY_VALUE
 
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
@@ -54,7 +59,8 @@ def _api_request(method: str, path: str, payload: dict | None = None) -> tuple[i
 
 
 def _safe_delete(path: str) -> None:
-    req = urllib.request.Request(API_BASE + path, method="DELETE")
+    headers = {API_KEY_HEADER: API_KEY_VALUE} if API_KEY_VALUE else {}
+    req = urllib.request.Request(API_BASE + path, method="DELETE", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=20):
             return
@@ -233,19 +239,24 @@ def test_live_api_user_event_activity_challenge_flow() -> None:
 
         _safe_delete(f"/users/{discord_id}")
 
-    req = urllib.request.Request(API_BASE + f"/users/{discord_id}", method="GET")
+    final_headers = {API_KEY_HEADER: API_KEY_VALUE} if API_KEY_VALUE else {}
+    req = urllib.request.Request(API_BASE + f"/users/{discord_id}", method="GET", headers=final_headers)
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req, timeout=20)
     assert exc_info.value.code == 404
 
     if event_id is not None:
-        req_event = urllib.request.Request(API_BASE + f"/events/{event_id}", method="GET")
+        req_event = urllib.request.Request(
+            API_BASE + f"/events/{event_id}", method="GET", headers=final_headers
+        )
         with pytest.raises(urllib.error.HTTPError) as exc_event:
             urllib.request.urlopen(req_event, timeout=20)
         assert exc_event.value.code == 404
 
     if challenge_id is not None:
-        req_challenge = urllib.request.Request(API_BASE + f"/challenges/{challenge_id}", method="GET")
+        req_challenge = urllib.request.Request(
+            API_BASE + f"/challenges/{challenge_id}", method="GET", headers=final_headers
+        )
         with pytest.raises(urllib.error.HTTPError) as exc_challenge:
             urllib.request.urlopen(req_challenge, timeout=20)
         assert exc_challenge.value.code == 404

@@ -68,7 +68,7 @@
 ## Logic Overview
 
 ### Discord Bot
-The Discord bot is implemented in the `services/discord-bot/` directory. It uses the `discord.py` library to interact with the Discord API. The bot's main responsibilities include:
+The Discord bot is implemented in the `services/discord-bot-szczypior/` directory. It uses the `discord.py` library to interact with the Discord API. The bot's main responsibilities include:
 - Responding to user commands.
 - Managing conversations and interactions.
 - Integrating with other services like the database and LLM.
@@ -92,7 +92,7 @@ The `infrastructure/` directory contains Dockerfiles and configurations for depl
 The `tests/` directory includes unit and integration tests to ensure the reliability and correctness of the codebase. Coverage reports are generated and stored in the `htmlcov/` directory.
 
 ### Deployment
-Deployment is managed using Fly.io, with configurations defined in `services/discord-bot/fly.toml`. The `Deploy to Fly.io` task automates the deployment process.
+Deployment is managed using Fly.io, with configurations defined in `services/discord-bot-szczypior/fly.toml`. The `Deploy to Fly.io` task automates the deployment process.
 
 ---
 

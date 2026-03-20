@@ -2,6 +2,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.api.auth import require_api_key
 from app.db.session import get_db
 from app.schemas.activity import ActivityCreate, ActivityRead, ActivityUpdate, UserRankingRead
 from app.schemas.activity_rule import ActivityRulePatchPayload, ActivityRulePayload, ActivityRuleRead
@@ -14,7 +15,7 @@ from app.services.challenges_manager import ChallengesManager
 from app.services.events_manager import EventsManager
 from app.services.users_manager import UsersManager
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
 # ── Health ─────────────────────────────────────────────────────────────────

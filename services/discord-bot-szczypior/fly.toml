@@ -1,0 +1,31 @@
+# fly.toml dla szczypior-discord-bot-1.0
+app = 'szczypior-discord-bot-1-0'
+primary_region = 'fra'
+
+[build]
+  dockerfile = "../../infrastructure/docker/discord-bot.Dockerfile"
+
+# Discord bot nie potrzebuje HTTP service, działa jako long-running process
+# Zakomentowane http_service - bot działa w tle
+# [http_service]
+#   internal_port = 8080
+#   force_https = true
+#   auto_stop_machines = 'off'
+#   auto_start_machines = true
+#   min_machines_running = 1
+#   max_machines_running = 1
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+
+[env]
+  DB_SERVICE_API_KEY_HEADER = "X-API-Key"
+  DB_SERVICE_BASE_URL = "https://szczypior-db-service.fly.dev"
+
+# Sekrety do ustawienia przez: ./deploy.sh
+# Wymagane:
+# - DISCORD_TOKEN
+# - DB_SERVICE_API_KEY
+# - GEMINI_API_KEY (opcjonalnie)
+# - GOOGLE_API_KEY (opcjonalnie)

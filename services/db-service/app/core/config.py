@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     service_name: str = "szczypior-db-service"
     service_version: str = "0.1.0"
     api_prefix: str = "/api/v1"
+    api_key: str = Field(alias="DB_SERVICE_API_KEY")
+    api_key_header_name: str = Field(default="X-API-Key", alias="DB_SERVICE_API_KEY_HEADER")
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     db_user: str | None = Field(default=None, alias="user")
     db_password: str | None = Field(default=None, alias="password")

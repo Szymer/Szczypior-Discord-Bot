@@ -11,11 +11,13 @@
     "editor.formatOnSave": true
   },
   "forwardPorts": [
+    8001,
     8000,
+    8080,
     3000
   ],
   "runServices": [
-    "db-service"
+    "workspace"
   ],
   "customizations": {
     "vscode": {
@@ -27,10 +29,13 @@
         "bradlc.vscode-tailwindcss",
         "formulahendry.docker-explorer",
         "GitHub.copilot-chat",
-        "tht13.python"
+        "tht13.python",
+        "ms-vscode.vscode-typescript-next", 
+        "esbenp.prettier-vscode"  
       ]
     }
   },
-  "postCreateCommand": "pip install -r services/db-service/requirements.txt && pip install -r services/discord-bot/requirements.txt",
+  "postCreateCommand": ".devcontainer/postCreate.sh",
+  "postStartCommand": "bash scripts/dev-start.sh",
   "remoteUser": "root"
 }
