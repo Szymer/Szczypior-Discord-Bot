@@ -7,6 +7,7 @@ WORKDIR /app
 COPY services/web-dashboard/react/package*.json ./
 ENV NODE_ENV=development
 ENV VITE_APP_ENV=production
+ENV NODE_OPTIONS=--max-old-space-size=1024
 
 RUN npm ci --include=dev
 
