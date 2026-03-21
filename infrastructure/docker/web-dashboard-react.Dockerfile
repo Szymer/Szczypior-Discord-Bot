@@ -5,14 +5,17 @@ WORKDIR /app
 
 # Skopiuj tylko pliki wymagane do instalacji
 COPY services/web-dashboard/react/package*.json ./
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 ENV VITE_APP_ENV=production
 
 RUN npm ci --include=dev
 
 COPY services/web-dashboard/react /app
 
-RUN npm run build 2>&1; echo "Build completed with exit code $?" && exit 0
+RUN npm run build
+
+# Fail fast if build output is missing.
+RUN test -d /app/dist
 
 # Stage drugi – serwer statycznych plików (nginx)
 FROM nginx:stable-alpine AS production
