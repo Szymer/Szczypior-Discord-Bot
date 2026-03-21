@@ -2,7 +2,14 @@ import { supabase } from "@/auth/supabaseClient";
 import { getAppEnv } from "@/config/runtimeEnv";
 
 const rawDjangoApiUrl = getAppEnv("VITE_DJANGO_API_URL");
-const DJANGO_API_URL = rawDjangoApiUrl?.replace(/\/$/, "");
+const normalizeUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/$/, "");
+  if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+};
+const DJANGO_API_URL = rawDjangoApiUrl ? normalizeUrl(rawDjangoApiUrl) : undefined;
 
 if (!DJANGO_API_URL) {
   throw new Error("Missing VITE_DJANGO_API_URL environment variable");
