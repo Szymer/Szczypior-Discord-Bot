@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/auth/supabaseClient";
 import { DjangoApiError, fetchCurrentUser, DjangoUser } from "@/api/djangoClient";
+import { getAppEnv } from "@/config/runtimeEnv";
 
 interface AuthUser extends DjangoUser {
   isAdmin: boolean;
@@ -18,6 +19,30 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+const getDiscordRedirectUrl = (): string => {
+  const configured = getAppEnv("VITE_AUTH_REDIRECT_URL");
+  if (configured) {
+    return configured;
+  }
+  return `${window.location.origin}/home`;
+};
+
+const mapBackendErrorToUserMessage = (err: unknown): string => {
+  if (err instanceof DjangoApiError) {
+    return `Backend zwrocil blad HTTP ${err.status}. Sprawdz URL backendu i CORS.`;
+  }
+
+  if (err instanceof Error) {
+    if (/Failed to fetch/i.test(err.message)) {
+      return "Brak polaczenia z backendem. Sprawdz VITE_DJANGO_API_URL i dostepnosc serwisu backend.";
+    }
+
+    return `Blad backendu: ${err.message}`;
+  }
+
+  return "Tymczasowy blad polaczenia z backendem. Sesja zostala zachowana.";
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -44,7 +69,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      setError("Tymczasowy blad polaczenia z backendem. Sesja zostala zachowana.");
+      setError(mapBackendErrorToUserMessage(err));
     }
   }, []);
 
@@ -80,7 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "discord",
-      options: { redirectTo: window.location.origin + "/home" },
+      options: { redirectTo: getDiscordRedirectUrl() },
     });
     if (oauthError) {
       setError(oauthError.message);

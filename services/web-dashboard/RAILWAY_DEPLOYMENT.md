@@ -57,6 +57,22 @@ W Railway Dashboard:
 - `VITE_SUPABASE_URL` - URL Supabase
 - `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` - Publishable key Supabase
 
+**Zalecane (OAuth Discord):**
+
+- `VITE_AUTH_REDIRECT_URL` - pełny URL powrotu po logowaniu (np. `https://twoj-frontend.railway.app/home`)
+
+### 2.1. Wymagana konfiguracja w Supabase (Auth)
+
+W Supabase Dashboard ustaw:
+
+- `Authentication -> URL Configuration -> Site URL`:
+   - `https://twoj-frontend.railway.app`
+- `Authentication -> URL Configuration -> Redirect URLs`:
+   - `https://twoj-frontend.railway.app/home`
+   - (opcjonalnie lokalnie) `http://localhost:8080/home`
+
+Jeżeli produkcyjny URL nie jest na liście Redirect URLs, Supabase może zignorować `redirectTo` i przekierować na stary adres (np. localhost).
+
 ### 3. Deploy frontend:
 
 ```bash

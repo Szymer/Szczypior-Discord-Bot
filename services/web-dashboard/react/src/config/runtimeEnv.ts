@@ -2,7 +2,8 @@ type AppEnvKey =
   | "VITE_DJANGO_API_URL"
   | "VITE_SUPABASE_URL"
   | "VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY"
-  | "VITE_SUPABASE_ANON_KEY";
+  | "VITE_SUPABASE_ANON_KEY"
+  | "VITE_AUTH_REDIRECT_URL";
 
 const readRuntimeConfig = (): Partial<ImportMetaEnv> => {
   if (typeof window === "undefined") {
