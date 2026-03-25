@@ -8,7 +8,6 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# Najpierw instalacja zależności systemowych
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
@@ -19,14 +18,13 @@ COPY libs ./web-dashboard/libs
 
 WORKDIR /app/web-dashboard
 
-# Prostsze ID cache dla Railway
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    uv sync --frozen --python /usr/local/bin/python --no-install-project --no-dev
+# Usunięto --mount=type=cache
+RUN uv sync --frozen --python /usr/local/bin/python --no-install-project --no-dev
 
 COPY services/web-dashboard /app/web-dashboard
 
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    uv sync --frozen --python /usr/local/bin/python --no-dev
+# Usunięto --mount=type=cache
+RUN uv sync --frozen --python /usr/local/bin/python --no-dev
 
 RUN mkdir -p /app/staticfiles
 
@@ -37,7 +35,6 @@ ENV PATH="/app/web-dashboard/.venv/bin:$PATH" \
 
 WORKDIR /app/web-dashboard
 
-# Lżejsze zależności runtime
 RUN apt-get update && apt-get install -y \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
