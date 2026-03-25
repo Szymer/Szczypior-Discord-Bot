@@ -53,7 +53,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # CsrfViewMiddleware is intentionally disabled: all API endpoints use JWT
+    # Bearer token auth (Supabase), not session/cookie auth, so CSRF protection
+    # is not applicable and would block all non-GET requests from the SPA.
+    # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

@@ -23,7 +23,7 @@ class GeminiClient(BaseLLMClient):
 
 
 
-    _DEFAULT_MODEL = "models/gemini-3.1-flash-lite"
+    _DEFAULT_MODEL = "models/gemini-3.1-flash-lite-preview"
 
     @staticmethod
     def _parse_model_list(raw: str) -> list[str]:
@@ -54,7 +54,11 @@ class GeminiClient(BaseLLMClient):
             raise ValueError("Nie znaleziono klucza GEMINI_API_KEY w zmiennych środowiskowych.")
 
         # Nowy SDK używa centralnego klienta zamiast obiektów GenerativeModel.
-        self.client = genai.Client(api_key=api_key)
+        # Preview modele (np. gemini-3.1) wymagają v1beta endpoint.
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options={"api_version": "v1beta"},
+        )
 
         # Ustaw domyślny model jeśli nie podano
         if not self.model_name:
@@ -89,8 +93,8 @@ class GeminiClient(BaseLLMClient):
             return [self._normalize_model_name(item) for item in env_raw.split(",") if item.strip()]
 
         return [
-            "models/gemini-2.5-flash-lite",
-            "models/gemini-2.5-flash",
+            "models/gemini-2.0-flash",
+            "models/gemini-1.5-flash",
         ]
 
     @staticmethod
@@ -108,11 +112,32 @@ class GeminiClient(BaseLLMClient):
             or "429" in message
         )
 
+    @staticmethod
+    def _extract_thought_parts(response) -> list:
+        """Wyciąga thought parts z odpowiedzi Gemini (potrzebne dla modeli 3.x thinking).
+
+        Thought signatures muszą być zawarte w kolejnych turach multi-turn konwersacji,
+        aby modele Gemini 3.x działały poprawnie.
+        """
+        thought_parts = []
+        try:
+            candidates = getattr(response, "candidates", []) or []
+            for candidate in candidates:
+                content = getattr(candidate, "content", None)
+                parts = getattr(content, "parts", []) or []
+                for part in parts:
+                    if getattr(part, "thought", False):
+                        thought_parts.append(part)
+        except Exception:
+            pass
+        return thought_parts
+
     def _generate_content_with_fallback(
         self,
         *,
         contents: Any,
         config: Optional[genai_types.GenerateContentConfig] = None,
+        thought_parts: Optional[list] = None,
     ):
         """Wysyła request do Gemini z automatycznym fallbackiem modelu.
 
@@ -120,7 +145,17 @@ class GeminiClient(BaseLLMClient):
         1. Jeśli model osiągnął limit RPM — natychmiast skocz do następnego.
         2. Jeśli API zwróciło błąd kwalifikujący się do fallbacku — skocz do następnego.
         3. Gdy wszystkie modele wyczerpane (RPM lub błędy) — rzuć wyjątek.
+
+        Args:
+            thought_parts: Opcjonalne thought parts z poprzedniej odpowiedzi
+                           (wymagane dla multi-turn z modelami Gemini 3.x thinking).
         """
+        # Dołącz thought parts z poprzedniej tury na początku contents (multi-turn thinking)
+        if thought_parts:
+            if isinstance(contents, list):
+                contents = thought_parts + contents
+            else:
+                contents = thought_parts + [contents]
         candidates: list[str] = [self.model_name]
         for candidate in self._fallback_models():
             if candidate not in candidates:
@@ -191,9 +226,14 @@ class GeminiClient(BaseLLMClient):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         system_instruction: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ) -> Optional[genai_types.GenerateContentConfig]:
         """
         Buduje konfigurację generowania dla nowego SDK google-genai.
+
+        Args:
+            thinking_budget: Budżet tokenów na myślenie dla modeli thinking (gemini-3.x).
+                             0 = wyłącz myślenie, None = domyślne zachowanie modelu.
         """
         cfg: Dict[str, Any] = {
             "temperature": (
@@ -213,6 +253,11 @@ class GeminiClient(BaseLLMClient):
 
         if system_instruction:
             cfg["system_instruction"] = system_instruction
+
+        # Konfiguracja myślenia dla modeli Gemini 3.x (thinking models)
+        resolved_budget = thinking_budget if thinking_budget is not None else self.generation_params.get("thinking_budget")
+        if resolved_budget is not None:
+            cfg["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=int(resolved_budget))
 
         return genai_types.GenerateContentConfig(**cfg) if cfg else None
 
@@ -364,7 +409,7 @@ class GeminiClient(BaseLLMClient):
         image_url: str, 
         prompt: str, 
         system_instruction: Optional[str] = None,
-        better_model: str = "models/gemini-2.5-flash"
+        better_model: str = "models/gemini-2.0-flash"
     ) -> Dict[str, Any]:
         """Analizuje obraz używając lepszego modelu (retry dla problemów z kontrastem)."""
         # Tymczasowo zmień model
