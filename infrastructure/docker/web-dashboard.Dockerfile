@@ -1,5 +1,7 @@
 FROM python:3.13-slim AS build
 
+ARG RAILWAY_SERVICE_ID 
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -11,15 +13,14 @@ WORKDIR /app
 COPY services/web-dashboard/pyproject.toml services/web-dashboard/uv.lock ./web-dashboard/
 COPY libs ./web-dashboard/libs
 
-# Zmień workdir do katalogu projektu dla uv sync
 WORKDIR /app/web-dashboard
 
-RUN --mount=type=cache,id=uv-cache-web-dashboard,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/${RAILWAY_SERVICE_ID}-uv-cache,target=/root/.cache/uv \
     uv sync --frozen --python /usr/local/bin/python --no-install-project --no-dev
 
 COPY services/web-dashboard /app/web-dashboard
 
-RUN --mount=type=cache,id=uv-cache-web-dashboard,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/${RAILWAY_SERVICE_ID}-uv-cache,target=/root/.cache/uv \
     uv sync --frozen --python /usr/local/bin/python --no-dev
 
 # Add system deps (libpq, gcc) – tu już w build
