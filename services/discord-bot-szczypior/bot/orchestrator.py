@@ -1076,13 +1076,14 @@ class BotOrchestrator:
             base_pts = int(distance * activity_info["base_points"])
             weight_bonus = total_points - base_pts  # uproszczone
             if weight_kg and weight_kg > 0 and "obciążenie" in activity_info.get("bonuses", []):
-                weight_bonus = int((weight_kg / 5) * (distance * activity_info["base_points"] * 0.1))
+                 weight_bonus = (distance / 2 * activity_info["base_points"] )
             else:
                 weight_bonus = 0
             elevation_bonus = 0
             if elevation_m and elevation_m > 0 and "przewyższenie" in activity_info.get("bonuses", []):
-                elevation_bonus = int((elevation_m / 100) * (distance * activity_info["base_points"] * 0.05))
-
+                elevation_bonus = int((elevation_m / 50) * 500)
+                
+            
             iid = self._create_unique_id(message)
             display_name = get_display_name(message.author)
             time_minutes = self._parse_analysis_time_to_minutes(analysis.get("czas"))
