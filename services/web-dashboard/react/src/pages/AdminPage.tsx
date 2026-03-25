@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Shield, CalendarDays, Target, ScrollText, Plus, Search, Trash2, Award, Filter } from "lucide-react";
+import { Shield, CalendarDays, Target, ScrollText, Plus, Search, Trash2, Pencil, Filter } from "lucide-react";
 import { ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 import { djangoFetch } from "@/api/djangoClient";
+import { useChallenges } from "@/hooks/useChallenges";
 
 type ActivityType = keyof typeof ACTIVITY_CONFIG;
 
@@ -27,7 +28,14 @@ interface AdminActivity {
   durationMin: number;
   paceMinPerKm: number | null;
   pointsEarned: number;
+  basePoints: number;
   bonusPoints: number;
+  weightBonusPoints: number;
+  elevationBonusPoints: number;
+  missionBonusPoints: number;
+  loadKg: number | null;
+  elevationGain: number | null;
+  challengeId: number | null;
 }
 
 interface AdminEvent {
@@ -100,23 +108,50 @@ const AdminPage = () => {
   );
 };
 
+interface SpecialMission {
+  id: number;
+  name: string;
+  emoji: string;
+  bonusPoints: number;
+  description: string;
+}
+
+interface EditForm {
+  activityType: ActivityType;
+  weightKg: string;
+  elevationM: string;
+  specialMissionId: string;
+}
+
 const ActivitiesTab = () => {
+  const { challenges } = useChallenges();
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [missions, setMissions] = useState<SpecialMission[]>([]);
   const [activities, setActivities] = useState<AdminActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [filterUser, setFilterUser] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [filterChallenge, setFilterChallenge] = useState<string>("all");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [search, setSearch] = useState("");
 
-  const [bonusDialog, setBonusDialog] = useState<AdminActivity | null>(null);
-  const [bonusAmount, setBonusAmount] = useState("");
+  const [editDialog, setEditDialog] = useState<AdminActivity | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ activityType: "running_terrain", weightKg: "", elevationM: "", specialMissionId: "" });
 
   const loadPlayers = async () => {
     const data = await djangoFetch<PlayerRow[]>("/api/players/");
     setPlayers(data);
+  };
+
+  const loadMissions = async () => {
+    try {
+      const data = await djangoFetch<SpecialMission[]>("/api/admin/missions/");
+      setMissions(data);
+    } catch (err) {
+      console.error("[loadMissions] failed:", err);
+    }
   };
 
   const loadActivities = async () => {
@@ -125,6 +160,7 @@ const ActivitiesTab = () => {
     params.set("limit", "200");
     if (filterUser !== "all") params.set("userId", filterUser);
     if (filterType !== "all") params.set("type", filterType);
+    if (filterChallenge !== "all") params.set("challengeId", filterChallenge);
     if (filterDateFrom) params.set("dateFrom", filterDateFrom);
     if (filterDateTo) params.set("dateTo", filterDateTo);
     if (search.trim()) params.set("search", search.trim());
@@ -139,27 +175,63 @@ const ActivitiesTab = () => {
 
   useEffect(() => {
     loadPlayers();
+    loadMissions();
   }, []);
 
   useEffect(() => {
     loadActivities();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterUser, filterType, filterDateFrom, filterDateTo, search]);
+  }, [filterUser, filterType, filterChallenge, filterDateFrom, filterDateTo, search]);
 
-  const addBonus = async () => {
-    if (!bonusDialog || !bonusAmount) return;
-    const points = parseInt(bonusAmount, 10);
-    if (isNaN(points) || points <= 0) return;
-
-    await djangoFetch(`/api/admin/activities/${bonusDialog.id}/bonus/`, {
-      method: "POST",
-      body: JSON.stringify({ points }),
+  const openEditDialog = (a: AdminActivity) => {
+    setEditDialog(a);
+    // Try to find matching mission by its bonus_points value (best-effort pre-select)
+    const matchedMission = a.missionBonusPoints > 0
+      ? missions.find(m => m.bonusPoints === a.missionBonusPoints)
+      : undefined;
+    setEditForm({
+      activityType: a.type,
+      weightKg: a.loadKg != null ? String(a.loadKg) : "",
+      elevationM: a.elevationGain != null ? String(a.elevationGain) : "",
+      specialMissionId: matchedMission ? String(matchedMission.id) : "",
     });
+  };
 
-    setBonusDialog(null);
-    setBonusAmount("");
+  const saveEdit = async () => {
+    if (!editDialog) return;
+    await djangoFetch(`/api/admin/activities/${editDialog.id}/`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        activityType: editForm.activityType,
+        weightKg: editForm.weightKg !== "" ? parseFloat(editForm.weightKg) : null,
+        elevationM: editForm.elevationM !== "" ? parseInt(editForm.elevationM, 10) : null,
+        specialMissionId: editForm.specialMissionId !== "" ? editForm.specialMissionId : "",
+      }),
+    });
+    setEditDialog(null);
     await loadActivities();
   };
+
+  // Live preview – mirrors backend formula
+  const editPreview = useMemo(() => {
+    if (!editDialog) return null;
+    const cfg = ACTIVITY_CONFIG[editForm.activityType];
+    const dist = editDialog.distanceKm;
+    const wKg = parseFloat(editForm.weightKg) || 0;
+    const elM = parseInt(editForm.elevationM, 10) || 0;
+    const basePts = Math.round(dist * cfg.pointsPerKm);
+    const weightBonus = wKg > 0 && cfg.bonuses.includes("obciążenie")
+      ? Math.floor((wKg / 5) * (dist * cfg.pointsPerKm * 0.1))
+      : 0;
+    const elevationBonus = elM > 0 && cfg.bonuses.includes("przewyższenia")
+      ? Math.floor((elM / 100) * (dist * cfg.pointsPerKm * 0.05))
+      : 0;
+    const selectedMission = editForm.specialMissionId
+      ? missions.find(m => String(m.id) === editForm.specialMissionId)
+      : undefined;
+    const missionBonus = selectedMission ? selectedMission.bonusPoints : 0;
+    return { basePts, weightBonus, elevationBonus, missionBonus, selectedMission, total: basePts + weightBonus + elevationBonus + missionBonus };
+  }, [editDialog, editForm, missions]);
 
   const visibleActivities = useMemo(() => activities.slice(0, 100), [activities]);
 
@@ -169,7 +241,7 @@ const ActivitiesTab = () => {
         <div className="flex items-center gap-2 text-tactical text-muted-foreground mb-2">
           <Filter className="w-3.5 h-3.5" /> FILTRY
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Szukaj operatora..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-secondary border-border" />
@@ -186,6 +258,13 @@ const ActivitiesTab = () => {
             <SelectContent>
               <SelectItem value="all">Wszystkie typy</SelectItem>
               {Object.values(ACTIVITY_CONFIG).map(cfg => <SelectItem key={cfg.type} value={cfg.type}>{cfg.emoji} {cfg.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterChallenge} onValueChange={setFilterChallenge}>
+            <SelectTrigger className="bg-secondary border-border"><SelectValue placeholder="Wyzwanie" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Wszystkie wyzwania</SelectItem>
+              {challenges.map(ch => <SelectItem key={ch.id} value={String(ch.id)}>{ch.emoji} {ch.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className="bg-secondary border-border" />
@@ -206,6 +285,7 @@ const ActivitiesTab = () => {
               <TableHead className="text-tactical text-primary">CZAS</TableHead>
               <TableHead className="text-tactical text-primary">PUNKTY</TableHead>
               <TableHead className="text-tactical text-primary">BONUS</TableHead>
+              <TableHead className="text-tactical text-primary">WYZWANIE</TableHead>
               <TableHead className="text-tactical text-primary">AKCJE</TableHead>
             </TableRow>
           </TableHeader>
@@ -213,6 +293,7 @@ const ActivitiesTab = () => {
             {visibleActivities.map(a => {
               const player = players.find(p => p.id === a.userId);
               const cfg = ACTIVITY_CONFIG[a.type];
+              const challenge = a.challengeId != null ? challenges.find(ch => String(ch.id) === String(a.challengeId)) : null;
               return (
                 <TableRow key={a.id} className="border-border">
                   <TableCell className="text-sm">{a.date}</TableCell>
@@ -223,9 +304,14 @@ const ActivitiesTab = () => {
                   <TableCell className="text-sm">{formatDuration(a.durationMin ?? 0)}</TableCell>
                   <TableCell className="text-sm font-bold text-primary">{a.pointsEarned.toLocaleString()}</TableCell>
                   <TableCell className="text-sm">{a.bonusPoints ? `+${a.bonusPoints}` : "—"}</TableCell>
+                  <TableCell className="text-sm">
+                    {challenge
+                      ? <span className="text-accent">{challenge.emoji} {challenge.name}</span>
+                      : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell>
-                    <Button size="sm" variant="ghost" className="text-tactical text-accent hover:text-accent hover:bg-accent/10" onClick={() => { setBonusDialog(a); setBonusAmount(""); }}>
-                      <Award className="w-3 h-3 mr-1" /> MISJA
+                    <Button size="sm" variant="ghost" className="text-tactical text-accent hover:text-accent hover:bg-accent/10" onClick={() => openEditDialog(a)}>
+                      <Pencil className="w-3 h-3 mr-1" /> EDYTUJ
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -235,17 +321,94 @@ const ActivitiesTab = () => {
         </Table>
       </div>
 
-      <Dialog open={!!bonusDialog} onOpenChange={open => !open && setBonusDialog(null)}>
-        <DialogContent className="bg-card border-border">
+      <Dialog open={!!editDialog} onOpenChange={open => !open && setEditDialog(null)}>
+        <DialogContent className="bg-card border-border max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="text-primary tracking-widest">PRZYZNAJ BONUS</DialogTitle>
+            <DialogTitle className="text-primary tracking-widest">EDYTUJ AKTYWNOŚĆ</DialogTitle>
+            <DialogDescription className="sr-only">Formularz edycji aktywności — zmień typ, obciążenie, przewyższenie lub misję specjalną.</DialogDescription>
           </DialogHeader>
-          {bonusDialog && (
-            <div className="space-y-4">
-              <Input type="number" placeholder="np. 2000" value={bonusAmount} onChange={e => setBonusAmount(e.target.value)} className="bg-secondary border-border" />
-              <Button onClick={addBonus} className="w-full"><Award className="w-4 h-4 mr-2" /> PRZYZNAJ BONUS</Button>
-            </div>
-          )}
+          {editDialog && editPreview && (() => {
+            const cfg = ACTIVITY_CONFIG[editForm.activityType];
+            const showWeight = cfg.bonuses.includes("obciążenie");
+            const showElevation = cfg.bonuses.includes("przewyższenia");
+            return (
+              <div className="space-y-4">
+                <div className="text-tactical text-muted-foreground text-xs">
+                  {editDialog.date} · {editDialog.distanceKm} km
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-tactical text-xs text-muted-foreground">TYP AKTYWNOŚCI</label>
+                  <Select value={editForm.activityType} onValueChange={(v: ActivityType) => setEditForm({ ...editForm, activityType: v })}>
+                    <SelectTrigger className="bg-secondary border-border"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.values(ACTIVITY_CONFIG).map(c => (
+                        <SelectItem key={c.type} value={c.type}>{c.emoji} {c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {showWeight && (
+                  <div className="space-y-1">
+                    <label className="text-tactical text-xs text-muted-foreground">OBCIĄŻENIE [kg]</label>
+                    <Input
+                      type="number" min="0" step="0.5"
+                      placeholder="np. 10"
+                      value={editForm.weightKg}
+                      onChange={e => setEditForm({ ...editForm, weightKg: e.target.value })}
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                )}
+
+                {showElevation && (
+                  <div className="space-y-1">
+                    <label className="text-tactical text-xs text-muted-foreground">PRZEWYŻSZENIE [m]</label>
+                    <Input
+                      type="number" min="0"
+                      placeholder="np. 250"
+                      value={editForm.elevationM}
+                      onChange={e => setEditForm({ ...editForm, elevationM: e.target.value })}
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-tactical text-xs text-muted-foreground">MISJA SPECJALNA</label>
+                  <Select
+                    value={editForm.specialMissionId}
+                    onValueChange={v => setEditForm({ ...editForm, specialMissionId: v === "none" ? "" : v })}
+                  >
+                    <SelectTrigger className="bg-secondary border-border"><SelectValue placeholder="Brak misji" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Brak misji</SelectItem>
+                      {missions.map(m => (
+                        <SelectItem key={m.id} value={String(m.id)}>
+                          {m.emoji} {m.name} <span className="text-muted-foreground ml-1">(+{m.bonusPoints.toLocaleString()} pkt)</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {missions.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Brak aktywnych misji w bazie danych</p>
+                  )}
+                </div>
+
+                <div className="border border-border bg-secondary/50 p-3 rounded space-y-1 text-sm">
+                  <div className="text-tactical text-xs text-muted-foreground mb-2">PODGLĄD PRZELICZENIA</div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Bazowe</span><span className="font-mono">{editPreview.basePts.toLocaleString()}</span></div>
+                  {showWeight && <div className="flex justify-between"><span className="text-muted-foreground">Bonus obciążenie</span><span className="font-mono text-accent">+{editPreview.weightBonus.toLocaleString()}</span></div>}
+                  {showElevation && <div className="flex justify-between"><span className="text-muted-foreground">Bonus przewyższenie</span><span className="font-mono text-accent">+{editPreview.elevationBonus.toLocaleString()}</span></div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Bonus misja</span><span className="font-mono text-accent">+{editPreview.missionBonus.toLocaleString()}</span></div>
+                  <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-bold text-primary">SUMA</span><span className="font-bold text-primary font-mono">{editPreview.total.toLocaleString()}</span></div>
+                </div>
+
+                <Button onClick={saveEdit} className="w-full"><Pencil className="w-4 h-4 mr-2" /> ZAPISZ ZMIANY</Button>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

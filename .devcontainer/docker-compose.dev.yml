@@ -48,19 +48,14 @@ services:
       - szczypior-network
     profiles: [ "bot" ]
   web-dashboard:
-    # NOWY SERWIS DJANGO+REACT
+    # Dedykowany obraz developerski dla lokalnego Django.
     build:
       context: ..
-      dockerfile: infrastructure/docker/web-dashboard.Dockerfile # Twój Dockerfile
+      dockerfile: infrastructure/docker/web-dashboard-dev.Dockerfile
     env_file:
       - ../.env
-    volumes:
-      - ../services/web-dashboard:/app/web-dashboard:cached
     ports:
       - "8001:8001"
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             python manage.py runserver 0.0.0.0:8001"
     networks:
       - szczypior-network
     profiles: [ "dashboard" ] # osobny profil
@@ -68,12 +63,26 @@ services:
   web-frontend:
     build:
       context: ..
-      dockerfile: infrastructure/docker/web-frontend.Dockerfile
+      dockerfile: infrastructure/docker/web-dashboard-react.Dockerfile
     ports:
       - "8002:80"
     networks:
       - szczypior-network
     profiles: [ "frontend" ]
+
+  web-frontend-dev:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/web-dashboard-react-dev.Dockerfile
+    working_dir: /app
+    env_file:
+      - ../.env
+    command: npm run dev -- --host 0.0.0.0 --port 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - szczypior-network
+    profiles: [ "frontend-dev" ]
 
 networks:
   szczypior-network:

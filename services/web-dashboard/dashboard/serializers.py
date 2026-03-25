@@ -47,6 +47,9 @@ class ActivitySerializer(serializers.ModelSerializer):
     pointsEarned = serializers.IntegerField(source="total_points")
     basePoints = serializers.IntegerField(source="base_points")
     bonusPoints = serializers.SerializerMethodField(method_name="get_bonus_points")
+    weightBonusPoints = serializers.IntegerField(source="weight_bonus_points")
+    elevationBonusPoints = serializers.IntegerField(source="elevation_bonus_points")
+    missionBonusPoints = serializers.IntegerField(source="mission_bonus_points")
     date = serializers.SerializerMethodField()
     challengeId = serializers.IntegerField(source="challenge_id")
 
@@ -67,6 +70,9 @@ class ActivitySerializer(serializers.ModelSerializer):
             "pointsEarned",
             "basePoints",
             "bonusPoints",
+            "weightBonusPoints",
+            "elevationBonusPoints",
+            "missionBonusPoints",
             "ai_comment",
             "challengeId",
         ]

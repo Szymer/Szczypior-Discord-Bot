@@ -13,12 +13,12 @@ COPY libs ./discord-bot/libs
 # Zmień workdir do katalogu projektu dla uv sync
 WORKDIR /app/discord-bot
 
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 COPY services/discord-bot-szczypior /app/discord-bot
 
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # Runtime

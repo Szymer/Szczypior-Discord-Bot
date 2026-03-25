@@ -4,6 +4,20 @@ Ten katalog zawiera backend Django oraz frontend React dla dashboardu.
 
 ## Uruchomienie w devcontainerze
 
+### Katalog roboczy dla komend
+
+Wszystkie komendy `docker compose` uruchamiaj z katalogu:
+
+```sh
+cd /workspaces/Szczypior-Discord-Bot
+```
+
+Komendy `npm` uruchamiaj z katalogu:
+
+```sh
+cd /workspaces/Szczypior-Discord-Bot/services/web-dashboard/react
+```
+
 ### 1. Django w kontenerze
 
 Z katalogu głównego repo uruchom usługę `web-dashboard` przez Docker Compose:
@@ -21,7 +35,7 @@ Właściwy frontend z logowaniem przez Discord znajduje się w katalogu główny
 Uruchom go osobno wewnątrz aktualnego workspace/devcontainera:
 
 ```sh
-cd /workspaces/Szczypior-Discord-Bot
+cd /workspaces/Szczypior-Discord-Bot/services/web-dashboard/react
 npm ci
 export VITE_DJANGO_API_URL=http://localhost:8001
 npm run dev -- --host 0.0.0.0 --port 8080
@@ -32,7 +46,7 @@ npm run dev -- --host 0.0.0.0 --port 8080
 Przy kolejnych uruchomieniach możesz pominąć `npm ci`, jeśli zależności już są zainstalowane, i odpalić frontend krócej:
 
 ```sh
-cd /workspaces/Szczypior-Discord-Bot
+cd /workspaces/Szczypior-Discord-Bot/services/web-dashboard/react
 VITE_DJANGO_API_URL=http://localhost:8001 npm run dev -- --host 0.0.0.0 --port 8080
 ```
 
@@ -52,7 +66,7 @@ docker compose -f .devcontainer/docker-compose.dev.yml --profile dashboard up --
 W drugim terminalu uruchom React:
 
 ```sh
-cd services/web-dashboard/react
+cd /workspaces/Szczypior-Discord-Bot/services/web-dashboard/react
 npm ci
 export VITE_DJANGO_API_URL=http://localhost:8001
 npm run dev -- --host 0.0.0.0 --port 8080
@@ -61,8 +75,27 @@ npm run dev -- --host 0.0.0.0 --port 8080
 Jeśli `npm ci` było już wykonane wcześniej:
 
 ```sh
-cd services/web-dashboard/react
+cd /workspaces/Szczypior-Discord-Bot/services/web-dashboard/react
 VITE_DJANGO_API_URL=http://localhost:8001 npm run dev -- --host 0.0.0.0 --port 8080
+```
+
+## Frontend dev przez Docker Compose
+
+Po dodaniu profilu `frontend-dev` możesz uruchomic frontend bez lokalnego `npm` w kontenerze `workspace`.
+W tym trybie kod React jest kopiowany podczas buildu obrazu, więc po zmianach w kodzie uruchom ponownie `up --build`.
+
+Uruchomienie tylko frontendu dev:
+
+```sh
+cd /workspaces/Szczypior-Discord-Bot
+docker compose -f .devcontainer/docker-compose.dev.yml --profile frontend-dev up --build web-frontend-dev
+```
+
+Uruchomienie backendu i frontendu dev razem:
+
+```sh
+cd /workspaces/Szczypior-Discord-Bot
+docker compose -f .devcontainer/docker-compose.dev.yml --profile dashboard --profile frontend-dev up --build web-dashboard web-frontend-dev
 ```
 
 ## Uwagi

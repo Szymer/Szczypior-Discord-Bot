@@ -11,7 +11,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
-from .models import Activity, AirsoftEvent, EventRegistration, Challenge, DiscordUser
+from .models import Activity, AirsoftEvent, EventRegistration, Challenge, DiscordUser, SpecialMission
 
 # Klient JWKS — pobiera i cachuje klucze publiczne Supabase (ES256)
 _jwks_client: PyJWKClient | None = None
@@ -557,6 +557,13 @@ def admin_activities(request):
         db_type = reverse_map.get(activity_type, activity_type)
         qs = qs.filter(activity_type=db_type)
 
+    challenge_id = request.GET.get("challengeId")
+    if challenge_id and challenge_id != "all":
+        try:
+            qs = qs.filter(challenge_id=int(challenge_id))
+        except (ValueError, TypeError):
+            return JsonResponse({"error": "Invalid challengeId"}, status=400)
+
     date_from = request.GET.get("dateFrom")
     if date_from:
         qs = qs.filter(created_at__date__gte=date_from)
@@ -575,6 +582,108 @@ def admin_activities(request):
     limit = int(request.GET.get("limit", 200))
     data = ActivitySerializer(qs[:limit], many=True).data
     return JsonResponse(list(data), safe=False)
+
+
+@require_http_methods(["GET", "OPTIONS"])
+def admin_missions(request):
+    _, error = _require_admin(request)
+    if error:
+        return error
+
+    qs = SpecialMission.objects.filter(is_active=True).order_by("name")
+    data = [
+        {
+            "id": m.id,
+            "name": m.name,
+            "emoji": m.emoji,
+            "bonusPoints": m.bonus_points,
+            "description": m.description or "",
+        }
+        for m in qs
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@require_http_methods(["PATCH", "OPTIONS"])
+def admin_activity_detail(request, activity_id: int):
+    _, error = _require_admin(request)
+    if error:
+        return error
+
+    try:
+        activity = Activity.objects.get(id=activity_id)
+    except Activity.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    body = json.loads(request.body or "{}")
+
+    from .serializers import ActivitySerializer
+
+    # Resolve new activity type if provided
+    new_frontend_type = body.get("activityType")
+    if new_frontend_type:
+        reverse_map = {v: k for k, v in getattr(settings, "ACTIVITY_MAP", {}).items()}
+        db_type = reverse_map.get(new_frontend_type, new_frontend_type)
+        activity.activity_type = db_type
+
+    # Load activity rules from shared constants
+    from libs.shared.constants import ACTIVITY_TYPES
+    activity_info = ACTIVITY_TYPES.get(activity.activity_type, {})
+
+    distance = float(activity.distance_km or 0)
+    base_pts_per_km = activity_info.get("base_points", 0)
+    base_points = int(distance * base_pts_per_km)
+    activity.base_points = base_points
+
+    # Weight / load bonus
+    weight_kg_raw = body.get("weightKg")
+    weight_kg = float(weight_kg_raw) if weight_kg_raw not in (None, "") else None
+    activity.weight_kg = weight_kg
+
+    if weight_kg and weight_kg > 0 and "obciążenie" in activity_info.get("bonuses", []):
+        weight_bonus = int((weight_kg / 5) * (distance * base_pts_per_km * 0.1))
+    else:
+        weight_bonus = 0
+    activity.weight_bonus_points = weight_bonus
+
+    # Elevation bonus
+    elevation_m_raw = body.get("elevationM")
+    elevation_m = int(elevation_m_raw) if elevation_m_raw not in (None, "") else None
+    activity.elevation_m = elevation_m
+
+    if elevation_m and elevation_m > 0 and "przewyższenie" in activity_info.get("bonuses", []):
+        elevation_bonus = int((elevation_m / 100) * (distance * base_pts_per_km * 0.05))
+    else:
+        elevation_bonus = 0
+    activity.elevation_bonus_points = elevation_bonus
+
+    # Special mission bonus – set via FK
+    mission_id_raw = body.get("specialMissionId")
+    if mission_id_raw == "" or mission_id_raw is None:
+        activity.special_mission = None
+        activity.mission_bonus_points = 0
+    else:
+        try:
+            mission = SpecialMission.objects.get(id=int(mission_id_raw))
+            activity.special_mission = mission
+            activity.mission_bonus_points = mission.bonus_points
+        except SpecialMission.DoesNotExist:
+            return JsonResponse({"error": "Mission not found"}, status=404)
+
+    activity.total_points = (
+        activity.base_points
+        + activity.weight_bonus_points
+        + activity.elevation_bonus_points
+        + (activity.mission_bonus_points or 0)
+    )
+
+    activity.save(update_fields=[
+        "activity_type", "weight_kg", "elevation_m",
+        "base_points", "weight_bonus_points", "elevation_bonus_points",
+        "special_mission", "mission_bonus_points", "total_points",
+    ])
+
+    return JsonResponse(ActivitySerializer(activity).data)
 
 
 @require_http_methods(["POST", "OPTIONS"])
