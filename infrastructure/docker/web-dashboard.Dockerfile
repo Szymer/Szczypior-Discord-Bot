@@ -1,7 +1,5 @@
 FROM python:3.13-slim AS build
 
-ARG RAILWAY_SERVICE_ID 
-
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -15,12 +13,13 @@ COPY libs ./web-dashboard/libs
 
 WORKDIR /app/web-dashboard
 
-RUN --mount=type=cache,id=s/${RAILWAY_SERVICE_ID}-uv-cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/73bf4703-1453-49eb-b334-449a3d41d097-uv-cache,target=/root/.cache/uv \
     uv sync --frozen --python /usr/local/bin/python --no-install-project --no-dev
+
 
 COPY services/web-dashboard /app/web-dashboard
 
-RUN --mount=type=cache,id=s/${RAILWAY_SERVICE_ID}-uv-cache,target=/root/.cache/uv \
+RUN --mount=type=cache,id=s/73bf4703-1453-49eb-b334-449a3d41d097-uv-cache,target=/root/.cache/uv \
     uv sync --frozen --python /usr/local/bin/python --no-dev
 
 # Add system deps (libpq, gcc) – tu już w build
