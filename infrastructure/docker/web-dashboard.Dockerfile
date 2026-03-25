@@ -8,29 +8,28 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-COPY services/web-dashboard/pyproject.toml services/web-dashboard/uv.lock ./web-dashboard/
-COPY libs ./web-dashboard/libs
-
-WORKDIR /app/web-dashboard
-
-RUN --mount=type=cache,id=s/73bf4703-1453-49eb-b334-449a3d41d097-uv-cache,target=/root/.cache/uv \
-    uv sync --frozen --python /usr/local/bin/python --no-install-project --no-dev
-
-
-COPY services/web-dashboard /app/web-dashboard
-
-RUN --mount=type=cache,id=s/73bf4703-1453-49eb-b334-449a3d41d097-uv-cache,target=/root/.cache/uv \
-    uv sync --frozen --python /usr/local/bin/python --no-dev
-
-# Add system deps (libpq, gcc) – tu już w build
+# Najpierw instalacja zależności systemowych
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+COPY services/web-dashboard/pyproject.toml services/web-dashboard/uv.lock ./web-dashboard/
+COPY libs ./web-dashboard/libs
+
+WORKDIR /app/web-dashboard
+
+# Prostsze ID cache dla Railway
+RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+    uv sync --frozen --python /usr/local/bin/python --no-install-project --no-dev
+
+COPY services/web-dashboard /app/web-dashboard
+
+RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+    uv sync --frozen --python /usr/local/bin/python --no-dev
+
 RUN mkdir -p /app/staticfiles
 
-# Runtime (bez uv)
 FROM python:3.13-slim
 
 ENV PATH="/app/web-dashboard/.venv/bin:$PATH" \
@@ -38,9 +37,9 @@ ENV PATH="/app/web-dashboard/.venv/bin:$PATH" \
 
 WORKDIR /app/web-dashboard
 
-# Zainstaluj runtime deps (libpq)
+# Lżejsze zależności runtime
 RUN apt-get update && apt-get install -y \
-    libpq-dev \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app /app
