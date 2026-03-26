@@ -35,6 +35,8 @@ class BotOrchestrator:
         self.activity_keywords = config_manager.get_activity_keywords()
         # Cache: challenge_id -> activity types dict (same shape as ACTIVITY_TYPES)
         self._rules_cache: dict[int, dict[str, Any]] = {}
+        # Cache: challenge_id -> effective points_rules dict
+        self._points_rules_cache: dict[int, dict[str, Any]] = {}
         # Startup sync tunables: keep cache bounded to avoid memory spikes.
         self._startup_sync_user_history_limit = max(
             50,
@@ -101,6 +103,75 @@ class BotOrchestrator:
                 )
 
         return ACTIVITY_TYPES
+
+    @staticmethod
+    def _to_float_or_default(value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _to_int_or_default(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _normalize_points_rules(self, raw_points_rules: Optional[dict[str, Any]]) -> dict[str, Any]:
+        default_rules = config_manager.get_points_rules()
+        if not isinstance(raw_points_rules, dict):
+            raw_points_rules = {}
+
+        weight_raw = raw_points_rules.get("weight_bonus")
+        elevation_raw = raw_points_rules.get("elevation_bonus")
+
+        return {
+            "weight_bonus": {
+                "min_weight_kg": self._to_float_or_default(
+                    weight_raw.get("min_weight_kg") if isinstance(weight_raw, dict) else None,
+                    float(default_rules["weight_bonus"]["min_weight_kg"]),
+                ),
+                "distance_points_multiplier": self._to_float_or_default(
+                    weight_raw.get("distance_points_multiplier") if isinstance(weight_raw, dict) else None,
+                    float(default_rules["weight_bonus"]["distance_points_multiplier"]),
+                ),
+            },
+            "elevation_bonus": {
+                "meters_step": self._to_int_or_default(
+                    elevation_raw.get("meters_step") if isinstance(elevation_raw, dict) else None,
+                    int(default_rules["elevation_bonus"]["meters_step"]),
+                ),
+                "points_per_step": self._to_int_or_default(
+                    elevation_raw.get("points_per_step") if isinstance(elevation_raw, dict) else None,
+                    int(default_rules["elevation_bonus"]["points_per_step"]),
+                ),
+            },
+        }
+
+    def _get_points_rules(self, challenge_id: Optional[int]) -> dict[str, Any]:
+        if challenge_id is None:
+            return self._normalize_points_rules(None)
+
+        if challenge_id in self._points_rules_cache:
+            return self._points_rules_cache[challenge_id]
+
+        raw_points_rules: Optional[dict[str, Any]] = None
+        if self.api_manager:
+            try:
+                challenge = self.api_manager.get_challenge(challenge_id)
+                if isinstance(challenge.rules, dict):
+                    raw_points_rules = challenge.rules.get("points_rules")
+            except Exception:
+                logger.warning(
+                    "Failed to fetch challenge points_rules from API, using defaults",
+                    exc_info=True,
+                    extra={"challenge_id": challenge_id},
+                )
+
+        effective_rules = self._normalize_points_rules(raw_points_rules)
+        self._points_rules_cache[challenge_id] = effective_rules
+        return effective_rules
 
     def _create_unique_id(self, message: discord.Message) -> str:
         """
@@ -1213,7 +1284,7 @@ class BotOrchestrator:
         base_points_rate = activity_info["base_points"]
         base_points = int(distance * base_points_rate)
         bonuses = activity_info.get("bonuses", [])
-        points_rules = config_manager.get_points_rules()
+        points_rules = self._get_points_rules(challenge_id)
 
         weight_bonus_points = 0
         weight_bonus_cfg = points_rules.get("weight_bonus", {})

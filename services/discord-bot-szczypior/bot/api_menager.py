@@ -177,6 +177,11 @@ class APIManager:
         response_data = self._request("GET", "/challenges/active")
         return [ChallengeRead.model_validate(item) for item in (response_data or [])]
 
+    def get_challenge(self, challenge_id: int) -> ChallengeRead:
+        """Pobiera challenge po identyfikatorze."""
+        response_data = self._request("GET", f"/challenges/{challenge_id}")
+        return ChallengeRead.model_validate(response_data)
+
     def get_activity_rules(self, challenge_id: int) -> list[ActivityRuleRead]:
         """Pobiera reguły aktywności dla danego challenge'u."""
         response_data = self._request("GET", f"/challenges/{challenge_id}/activity-rules")
