@@ -68,18 +68,25 @@ def test_bieganie_with_weight():
     """Test biegania z obciążeniem."""
     points, error = orchestrator.calculate_points("bieganie_teren", 10, weight=10)
     assert error == "", f"Nie powinno być błędu: {error}"
-    # 10km * 1000 = 10000, bonus: (10kg/5) * (10*1000*0.1) = 2 * 1000 = 2000
-    # Total: 12000
-    assert points == 12000, f"Oczekiwano 12000, otrzymano {points}"
+    # 10km * 1000 = 10000, bonus obciążenia x1.5 => +5000
+    # Total: 15000
+    assert points == 15000, f"Oczekiwano 15000, otrzymano {points}"
+
+
+def test_bieganie_with_weight_below_threshold():
+    """Bonus obciążenia powinien działać dopiero od min. 5kg."""
+    points, error = orchestrator.calculate_points("bieganie_teren", 10, weight=4.9)
+    assert error == "", f"Nie powinno być błędu: {error}"
+    assert points == 10000, f"Oczekiwano 10000 (bez bonusu), otrzymano {points}"
 
 
 def test_bieganie_with_elevation():
     """Test biegania z przewyższeniem."""
     points, error = orchestrator.calculate_points("bieganie_teren", 10, elevation=200)
     assert error == "", f"Nie powinno być błędu: {error}"
-    # 10km * 1000 = 10000, bonus: (200m/100) * (10*1000*0.05) = 2 * 500 = 1000
-    # Total: 11000
-    assert points == 11000, f"Oczekiwano 11000, otrzymano {points}"
+    # 10km * 1000 = 10000, bonus przewyższenia: floor(200/50) * 500 = 2000
+    # Total: 12000
+    assert points == 12000, f"Oczekiwano 12000, otrzymano {points}"
 
 
 def test_plywanie_no_bonuses():
@@ -105,6 +112,36 @@ def test_cardio_basic():
     assert points == 4000, f"Oczekiwano 4000 (5km * 800), otrzymano {points}"
 
 
+def test_points_breakdown_consistency_with_weight_and_elevation():
+    """Suma breakdownu musi być zawsze równa total_points."""
+    breakdown, error = orchestrator.calculate_points_breakdown(
+        "cardio", 10, weight=10, elevation=200
+    )
+    assert error == "", f"Nie powinno być błędu: {error}"
+
+    expected_total = (
+        breakdown["base_points"]
+        + breakdown["weight_bonus_points"]
+        + breakdown["elevation_bonus_points"]
+    )
+    assert breakdown["total_points"] == expected_total
+
+    total_points, calc_error = orchestrator.calculate_points(
+        "cardio", 10, weight=10, elevation=200
+    )
+    assert calc_error == "", f"Nie powinno być błędu: {calc_error}"
+    assert total_points == breakdown["total_points"]
+
+
+def test_points_breakdown_consistency_without_bonuses():
+    """Dla aktywności bez bonusów breakdown i total też muszą się zgadzać."""
+    breakdown, error = orchestrator.calculate_points_breakdown("spacer", 8)
+    assert error == "", f"Nie powinno być błędu: {error}"
+    assert breakdown["weight_bonus_points"] == 0
+    assert breakdown["elevation_bonus_points"] == 0
+    assert breakdown["total_points"] == breakdown["base_points"]
+
+
 def test_all_activities_structure():
     """Test czy wszystkie typy aktywności mają wymagane pola."""
     required_fields = ["emoji", "base_points", "unit", "min_distance", "bonuses", "display_name"]
@@ -128,10 +165,13 @@ if __name__ == "__main__":
         test_spacer_min_distance,
         test_spacer_valid_distance,
         test_bieganie_with_weight,
+        test_bieganie_with_weight_below_threshold,
         test_bieganie_with_elevation,
         test_plywanie_no_bonuses,
         test_invalid_activity,
         test_cardio_basic,
+        test_points_breakdown_consistency_with_weight_and_elevation,
+        test_points_breakdown_consistency_without_bonuses,
         test_all_activities_structure,
     ]
 

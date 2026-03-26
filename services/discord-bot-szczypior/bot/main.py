@@ -408,19 +408,21 @@ async def activity_fix(ctx, activity_type: str, weight_kg: Optional[float] = Non
 
     # Przelicz punkty z nowymi danymi
     distance = current.distance_km
-    activity_info = ACTIVITY_TYPES[activity_type]
-    base_pts = int(distance * activity_info["base_points"])
-    bonuses = activity_info.get("bonuses", [])
+    breakdown, calc_error = orchestrator.calculate_points_breakdown(
+        activity_type=activity_type,
+        distance=distance,
+        weight=weight_kg,
+        elevation=elevation_m,
+        challenge_id=current.challenge_id,
+    )
+    if calc_error:
+        await ctx.send(f"❌ Nie udało się przeliczyć punktów: {calc_error}")
+        return
 
-    w_bonus = 0
-    if weight_kg and weight_kg > 0 and "obciążenie" in bonuses:
-        w_bonus = int((weight_kg / 5) * (distance * activity_info["base_points"] * 0.1))
-
-    e_bonus = 0
-    if elevation_m and elevation_m > 0 and "przewyższenie" in bonuses:
-        e_bonus = int((elevation_m / 100) * (distance * activity_info["base_points"] * 0.05))
-
-    new_total = max(base_pts + w_bonus + e_bonus, 1)
+    base_pts = breakdown["base_points"]
+    w_bonus = breakdown["weight_bonus_points"]
+    e_bonus = breakdown["elevation_bonus_points"]
+    new_total = breakdown["total_points"]
 
     # Wyślij update do API
     from libs.shared.schemas.activity import ActivityUpdate
