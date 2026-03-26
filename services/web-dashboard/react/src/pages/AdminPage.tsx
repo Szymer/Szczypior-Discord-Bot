@@ -12,6 +12,75 @@ import { ACTIVITY_CONFIG, formatPace, formatDuration } from "@/lib/mockData";
 import { djangoFetch } from "@/api/djangoClient";
 import { useChallenges } from "@/hooks/useChallenges";
 
+type PointsRules = {
+  weight_bonus: {
+    min_weight_kg: number;
+    distance_points_multiplier: number;
+  };
+  elevation_bonus: {
+    meters_step: number;
+    points_per_step: number;
+  };
+};
+
+const normalizeBonusName = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+const hasBonus = (bonuses: string[], bonusName: string): boolean => {
+  const normalizedBonus = normalizeBonusName(bonusName);
+  return bonuses.some((item) => normalizeBonusName(item) === normalizedBonus);
+};
+
+const toFloatOrDefault = (value: unknown, defaultValue: number): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+};
+
+const toIntOrDefault = (value: unknown, defaultValue: number): number => {
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+};
+
+const normalizePointsRules = (pointsRules: unknown): PointsRules => {
+  const baseRules: PointsRules = {
+    weight_bonus: {
+      min_weight_kg: 5,
+      distance_points_multiplier: 1.5,
+    },
+    elevation_bonus: {
+      meters_step: 50,
+      points_per_step: 500,
+    },
+  };
+
+  if (!pointsRules || typeof pointsRules !== "object") {
+    return baseRules;
+  }
+
+  const raw = pointsRules as {
+    weight_bonus?: { min_weight_kg?: unknown; distance_points_multiplier?: unknown };
+    elevation_bonus?: { meters_step?: unknown; points_per_step?: unknown };
+  };
+
+  return {
+    weight_bonus: {
+      min_weight_kg: toFloatOrDefault(raw.weight_bonus?.min_weight_kg, baseRules.weight_bonus.min_weight_kg),
+      distance_points_multiplier: toFloatOrDefault(
+        raw.weight_bonus?.distance_points_multiplier,
+        baseRules.weight_bonus.distance_points_multiplier,
+      ),
+    },
+    elevation_bonus: {
+      meters_step: toIntOrDefault(raw.elevation_bonus?.meters_step, baseRules.elevation_bonus.meters_step),
+      points_per_step: toIntOrDefault(raw.elevation_bonus?.points_per_step, baseRules.elevation_bonus.points_per_step),
+    },
+  };
+};
+
 type ActivityType = keyof typeof ACTIVITY_CONFIG;
 
 interface PlayerRow {
@@ -217,21 +286,55 @@ const ActivitiesTab = () => {
     if (!editDialog) return null;
     const cfg = ACTIVITY_CONFIG[editForm.activityType];
     const dist = editDialog.distanceKm;
-    const wKg = parseFloat(editForm.weightKg) || 0;
-    const elM = parseInt(editForm.elevationM, 10) || 0;
-    const basePts = Math.round(dist * cfg.pointsPerKm);
-    const weightBonus = wKg > 0 && cfg.bonuses.includes("obciążenie")
-      ? Math.floor((wKg / 5) * (dist * cfg.pointsPerKm * 0.1))
-      : 0;
-    const elevationBonus = elM > 0 && cfg.bonuses.includes("przewyższenia")
-      ? Math.floor((elM / 100) * (dist * cfg.pointsPerKm * 0.05))
-      : 0;
+    const wKg = editForm.weightKg !== "" ? Number.parseFloat(editForm.weightKg) : null;
+    const elM = editForm.elevationM !== "" ? Number.parseInt(editForm.elevationM, 10) : null;
+    const challenge = editDialog.challengeId != null
+      ? challenges.find((item) => String(item.id) === String(editDialog.challengeId))
+      : undefined;
+    const pointsRules = normalizePointsRules(challenge?.pointsRules);
+
+    let basePts = Math.trunc(dist * cfg.pointsPerKm);
+    let weightBonus = 0;
+    if (
+      wKg !== null
+      && wKg >= pointsRules.weight_bonus.min_weight_kg
+      && hasBonus(cfg.bonuses, "obciazenie")
+      && pointsRules.weight_bonus.distance_points_multiplier > 1
+    ) {
+      weightBonus = Math.trunc(basePts * (pointsRules.weight_bonus.distance_points_multiplier - 1));
+    }
+
+    let elevationBonus = 0;
+    if (
+      elM !== null
+      && elM > 0
+      && hasBonus(cfg.bonuses, "przewyzszenie")
+      && pointsRules.elevation_bonus.meters_step > 0
+    ) {
+      elevationBonus =
+        Math.trunc(elM / pointsRules.elevation_bonus.meters_step) * pointsRules.elevation_bonus.points_per_step;
+    }
+
     const selectedMission = editForm.specialMissionId
       ? missions.find(m => String(m.id) === editForm.specialMissionId)
       : undefined;
     const missionBonus = selectedMission ? selectedMission.bonusPoints : 0;
-    return { basePts, weightBonus, elevationBonus, missionBonus, selectedMission, total: basePts + weightBonus + elevationBonus + missionBonus };
-  }, [editDialog, editForm, missions]);
+
+    let totalWithoutMission = basePts + weightBonus + elevationBonus;
+    if (totalWithoutMission < 1) {
+      basePts = 1;
+      totalWithoutMission = 1;
+    }
+
+    return {
+      basePts,
+      weightBonus,
+      elevationBonus,
+      missionBonus,
+      selectedMission,
+      total: totalWithoutMission + missionBonus,
+    };
+  }, [challenges, editDialog, editForm, missions]);
 
   const visibleActivities = useMemo(() => activities.slice(0, 100), [activities]);
 

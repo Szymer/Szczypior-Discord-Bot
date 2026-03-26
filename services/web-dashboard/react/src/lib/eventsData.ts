@@ -22,6 +22,16 @@ export interface FitnessChallenge {
   endDate: string;
   goal: string;
   bonusPoints: number;
+  pointsRules?: {
+    weight_bonus?: {
+      min_weight_kg?: number;
+      distance_points_multiplier?: number;
+    };
+    elevation_bonus?: {
+      meters_step?: number;
+      points_per_step?: number;
+    };
+  } | null;
   isActive: boolean;
 }
 
