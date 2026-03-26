@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types as genai_types
 import requests
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageStat
 
 from .base_client import BaseLLMClient
 from .rate_limiter import ModelRateLimiter
@@ -306,6 +306,27 @@ class GeminiClient(BaseLLMClient):
                 pass
             raise Exception(f"Błąd generowania tekstu: {e}")
 
+    def _flatten_with_best_background(self, image: Image.Image) -> Image.Image:
+        """Spłaszcza przezroczysty obraz na białe lub czarne tło - wybiera to z wyższym kontrastem."""
+        # Upewnij się że mamy kanał alfa
+        if image.mode == "LA":
+            image = image.convert("RGBA")
+        alpha = image.split()[-1]
+        rgb = image.convert("RGB")
+
+        white_bg = Image.new("RGB", image.size, (255, 255, 255))
+        white_bg.paste(rgb, mask=alpha)
+
+        black_bg = Image.new("RGB", image.size, (0, 0, 0))
+        black_bg.paste(rgb, mask=alpha)
+
+        white_std = ImageStat.Stat(white_bg.convert("L")).stddev[0]
+        black_std = ImageStat.Stat(black_bg.convert("L")).stddev[0]
+
+        chosen = "black" if black_std > white_std else "white"
+        print(f"Przezroczystość → tło {chosen} (kontrast: biały={white_std:.1f}, czarny={black_std:.1f})")
+        return black_bg if black_std > white_std else white_bg
+
     def analyze_image(self, image_url: str, prompt: str, system_instruction: Optional[str] = None) -> Dict[str, Any]:
         """
         Analizuje obraz na podstawie dostarczonego promptu.
@@ -334,20 +355,19 @@ class GeminiClient(BaseLLMClient):
                 print(f"Zmniejszam obraz z {image.size} do maks. {max_size}")
                 image.thumbnail(max_size, Image.Resampling.LANCZOS)
 
-            # Konwertuj do RGB tylko jeśli format P (paleta), RGBA i LA zostaw bez zmian
+            # Spłaszcz przezroczystość do RGB z optymalnym tłem
             if image.mode == "P":
-                print(f"Konwertuję obraz z {image.mode} do RGBA")
                 image = image.convert("RGBA")
+
+            if image.mode in ("RGBA", "LA"):
+                image = self._flatten_with_best_background(image)
+            elif image.mode != "RGB":
+                image = image.convert("RGB")
 
             # Zapisz przetworzone zdjęcie do bajtów
             buffer = BytesIO()
-            # Użyj PNG dla obrazów z przezroczystością, JPEG dla reszty
-            if image.mode in ("RGBA", "LA"):
-                image.save(buffer, format="PNG")
-                content_type = "image/png"
-            else:
-                image.save(buffer, format="JPEG", quality=85)
-                content_type = "image/jpeg"
+            image.save(buffer, format="JPEG", quality=90)
+            content_type = "image/jpeg"
             image_bytes = buffer.getvalue()
 
             print(f"✅ Przetworzono obraz: rozmiar={len(image_bytes)} bajtów, wymiary={image.size}")
