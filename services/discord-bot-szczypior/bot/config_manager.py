@@ -182,6 +182,26 @@ class ConfigManager:
             }
         return self._activity_keywords
 
+    def get_points_rules(self) -> Dict[str, Any]:
+        """Zwraca reguły punktacji z config.json z bezpiecznymi domyślnymi wartościami."""
+        rules = self.config.get("points_rules", {})
+
+        weight_rules = rules.get("weight_bonus", {})
+        elevation_rules = rules.get("elevation_bonus", {})
+
+        return {
+            "weight_bonus": {
+                "min_weight_kg": float(weight_rules.get("min_weight_kg", 5)),
+                "distance_points_multiplier": float(
+                    weight_rules.get("distance_points_multiplier", 1.5)
+                ),
+            },
+            "elevation_bonus": {
+                "meters_step": int(elevation_rules.get("meters_step", 50)),
+                "points_per_step": int(elevation_rules.get("points_per_step", 500)),
+            },
+        }
+
     def is_debug_mode(self) -> bool:
         """
         Sprawdza czy bot działa w trybie DEBUG.

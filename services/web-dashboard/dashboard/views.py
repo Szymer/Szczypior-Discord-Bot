@@ -1,5 +1,7 @@
 import json
+import unicodedata
 from datetime import datetime
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -132,6 +134,128 @@ def _pace_to_float(pace_value: str | None) -> float | None:
         return round(int(mins) + int(secs) / 60, 2)
     except Exception:
         return None
+
+
+def _normalize_bonus_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
+    return normalized.strip().lower()
+
+
+def _has_bonus(bonuses: list[str] | None, bonus_name: str) -> bool:
+    if not bonuses:
+        return False
+    normalized_bonus = _normalize_bonus_name(bonus_name)
+    return any(_normalize_bonus_name(item) == normalized_bonus for item in bonuses)
+
+
+def _to_float_or_default(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_int_or_default(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_points_rules(points_rules: dict[str, Any] | None) -> dict[str, dict[str, float | int]]:
+    base_rules = {
+        "weight_bonus": {
+            "min_weight_kg": 5.0,
+            "distance_points_multiplier": 1.5,
+        },
+        "elevation_bonus": {
+            "meters_step": 50,
+            "points_per_step": 500,
+        },
+    }
+
+    if not isinstance(points_rules, dict):
+        return base_rules
+
+    weight_bonus = points_rules.get("weight_bonus")
+    elevation_bonus = points_rules.get("elevation_bonus")
+
+    base_rules["weight_bonus"]["min_weight_kg"] = _to_float_or_default(
+        weight_bonus.get("min_weight_kg") if isinstance(weight_bonus, dict) else None,
+        base_rules["weight_bonus"]["min_weight_kg"],
+    )
+    base_rules["weight_bonus"]["distance_points_multiplier"] = _to_float_or_default(
+        weight_bonus.get("distance_points_multiplier") if isinstance(weight_bonus, dict) else None,
+        base_rules["weight_bonus"]["distance_points_multiplier"],
+    )
+    base_rules["elevation_bonus"]["meters_step"] = _to_int_or_default(
+        elevation_bonus.get("meters_step") if isinstance(elevation_bonus, dict) else None,
+        base_rules["elevation_bonus"]["meters_step"],
+    )
+    base_rules["elevation_bonus"]["points_per_step"] = _to_int_or_default(
+        elevation_bonus.get("points_per_step") if isinstance(elevation_bonus, dict) else None,
+        base_rules["elevation_bonus"]["points_per_step"],
+    )
+
+    return base_rules
+
+
+def _effective_points_rules(challenge: Challenge | None) -> dict[str, dict[str, float | int]]:
+    if not challenge or not isinstance(challenge.rules, dict):
+        return _normalize_points_rules(None)
+    return _normalize_points_rules(challenge.rules.get("points_rules"))
+
+
+def _calculate_points_breakdown(
+    activity_info: dict[str, Any],
+    distance: float,
+    weight_kg: float | None,
+    elevation_m: int | None,
+    points_rules: dict[str, dict[str, float | int]],
+) -> dict[str, int]:
+    base_points_rate = activity_info.get("base_points", 0)
+    base_points = int(distance * base_points_rate)
+    bonuses = activity_info.get("bonuses", [])
+
+    weight_bonus_cfg = points_rules.get("weight_bonus", {})
+    min_weight_kg = _to_float_or_default(weight_bonus_cfg.get("min_weight_kg"), 5.0)
+    distance_multiplier = _to_float_or_default(
+        weight_bonus_cfg.get("distance_points_multiplier"), 1.5
+    )
+
+    weight_bonus_points = 0
+    if (
+        weight_kg
+        and weight_kg >= min_weight_kg
+        and _has_bonus(bonuses, "obciazenie")
+        and distance_multiplier > 1
+    ):
+        weight_bonus_points = int(base_points * (distance_multiplier - 1))
+
+    elevation_bonus_cfg = points_rules.get("elevation_bonus", {})
+    meters_step = _to_int_or_default(elevation_bonus_cfg.get("meters_step"), 50)
+    points_per_step = _to_int_or_default(elevation_bonus_cfg.get("points_per_step"), 500)
+
+    elevation_bonus_points = 0
+    if (
+        elevation_m
+        and elevation_m > 0
+        and _has_bonus(bonuses, "przewyzszenie")
+        and meters_step > 0
+    ):
+        elevation_bonus_points = int(elevation_m // meters_step) * points_per_step
+
+    total_points = base_points + weight_bonus_points + elevation_bonus_points
+    if total_points < 1:
+        base_points = 1
+        total_points = 1
+
+    return {
+        "base_points": base_points,
+        "weight_bonus_points": weight_bonus_points,
+        "elevation_bonus_points": elevation_bonus_points,
+        "total_points": total_points,
+    }
 
 
 @require_http_methods(["GET", "OPTIONS"])
@@ -631,31 +755,29 @@ def admin_activity_detail(request, activity_id: int):
     activity_info = ACTIVITY_TYPES.get(activity.activity_type, {})
 
     distance = float(activity.distance_km or 0)
-    base_pts_per_km = activity_info.get("base_points", 0)
-    base_points = int(distance * base_pts_per_km)
-    activity.base_points = base_points
 
     # Weight / load bonus
     weight_kg_raw = body.get("weightKg")
     weight_kg = float(weight_kg_raw) if weight_kg_raw not in (None, "") else None
     activity.weight_kg = weight_kg
 
-    if weight_kg and weight_kg > 0 and "obciążenie" in activity_info.get("bonuses", []):
-        weight_bonus = int((weight_kg / 5) * (distance * base_pts_per_km * 0.1))
-    else:
-        weight_bonus = 0
-    activity.weight_bonus_points = weight_bonus
-
     # Elevation bonus
     elevation_m_raw = body.get("elevationM")
     elevation_m = int(elevation_m_raw) if elevation_m_raw not in (None, "") else None
     activity.elevation_m = elevation_m
 
-    if elevation_m and elevation_m > 0 and "przewyższenie" in activity_info.get("bonuses", []):
-        elevation_bonus = int((elevation_m / 100) * (distance * base_pts_per_km * 0.05))
-    else:
-        elevation_bonus = 0
-    activity.elevation_bonus_points = elevation_bonus
+    points_rules = _effective_points_rules(activity.challenge)
+    points_breakdown = _calculate_points_breakdown(
+        activity_info=activity_info,
+        distance=distance,
+        weight_kg=weight_kg,
+        elevation_m=elevation_m,
+        points_rules=points_rules,
+    )
+
+    activity.base_points = points_breakdown["base_points"]
+    activity.weight_bonus_points = points_breakdown["weight_bonus_points"]
+    activity.elevation_bonus_points = points_breakdown["elevation_bonus_points"]
 
     # Special mission bonus – set via FK
     mission_id_raw = body.get("specialMissionId")
@@ -670,12 +792,7 @@ def admin_activity_detail(request, activity_id: int):
         except SpecialMission.DoesNotExist:
             return JsonResponse({"error": "Mission not found"}, status=404)
 
-    activity.total_points = (
-        activity.base_points
-        + activity.weight_bonus_points
-        + activity.elevation_bonus_points
-        + (activity.mission_bonus_points or 0)
-    )
+    activity.total_points = points_breakdown["total_points"] + (activity.mission_bonus_points or 0)
 
     activity.save(update_fields=[
         "activity_type", "weight_kg", "elevation_m",

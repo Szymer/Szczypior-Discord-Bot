@@ -35,6 +35,8 @@ class BotOrchestrator:
         self.activity_keywords = config_manager.get_activity_keywords()
         # Cache: challenge_id -> activity types dict (same shape as ACTIVITY_TYPES)
         self._rules_cache: dict[int, dict[str, Any]] = {}
+        # Cache: challenge_id -> effective points_rules dict
+        self._points_rules_cache: dict[int, dict[str, Any]] = {}
         # Startup sync tunables: keep cache bounded to avoid memory spikes.
         self._startup_sync_user_history_limit = max(
             50,
@@ -101,6 +103,75 @@ class BotOrchestrator:
                 )
 
         return ACTIVITY_TYPES
+
+    @staticmethod
+    def _to_float_or_default(value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _to_int_or_default(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _normalize_points_rules(self, raw_points_rules: Optional[dict[str, Any]]) -> dict[str, Any]:
+        default_rules = config_manager.get_points_rules()
+        if not isinstance(raw_points_rules, dict):
+            raw_points_rules = {}
+
+        weight_raw = raw_points_rules.get("weight_bonus")
+        elevation_raw = raw_points_rules.get("elevation_bonus")
+
+        return {
+            "weight_bonus": {
+                "min_weight_kg": self._to_float_or_default(
+                    weight_raw.get("min_weight_kg") if isinstance(weight_raw, dict) else None,
+                    float(default_rules["weight_bonus"]["min_weight_kg"]),
+                ),
+                "distance_points_multiplier": self._to_float_or_default(
+                    weight_raw.get("distance_points_multiplier") if isinstance(weight_raw, dict) else None,
+                    float(default_rules["weight_bonus"]["distance_points_multiplier"]),
+                ),
+            },
+            "elevation_bonus": {
+                "meters_step": self._to_int_or_default(
+                    elevation_raw.get("meters_step") if isinstance(elevation_raw, dict) else None,
+                    int(default_rules["elevation_bonus"]["meters_step"]),
+                ),
+                "points_per_step": self._to_int_or_default(
+                    elevation_raw.get("points_per_step") if isinstance(elevation_raw, dict) else None,
+                    int(default_rules["elevation_bonus"]["points_per_step"]),
+                ),
+            },
+        }
+
+    def _get_points_rules(self, challenge_id: Optional[int]) -> dict[str, Any]:
+        if challenge_id is None:
+            return self._normalize_points_rules(None)
+
+        if challenge_id in self._points_rules_cache:
+            return self._points_rules_cache[challenge_id]
+
+        raw_points_rules: Optional[dict[str, Any]] = None
+        if self.api_manager:
+            try:
+                challenge = self.api_manager.get_challenge(challenge_id)
+                if isinstance(challenge.rules, dict):
+                    raw_points_rules = challenge.rules.get("points_rules")
+            except Exception:
+                logger.warning(
+                    "Failed to fetch challenge points_rules from API, using defaults",
+                    exc_info=True,
+                    extra={"challenge_id": challenge_id},
+                )
+
+        effective_rules = self._normalize_points_rules(raw_points_rules)
+        self._points_rules_cache[challenge_id] = effective_rules
+        return effective_rules
 
     def _create_unique_id(self, message: discord.Message) -> str:
         """
@@ -1035,7 +1106,6 @@ class BotOrchestrator:
         Returns:
             ActivityRead jeśli sukces, None w przypadku błędu
         """
-        from datetime import datetime as _dt
         from libs.shared.schemas.activity import ActivityCreate
 
         if config_manager.is_debug_mode():
@@ -1065,24 +1135,29 @@ class BotOrchestrator:
             elevation_raw = analysis.get("przewyzszenie")
             elevation_m = int(float(elevation_raw)) if elevation_raw else None
 
-            # Oblicz punkty lokalnie
-            total_points, _ = self.calculate_points(
-                activity_type, distance, weight=weight_kg, elevation=elevation_m,
+            points_breakdown, error = self.calculate_points_breakdown(
+                activity_type,
+                distance,
+                weight=weight_kg,
+                elevation=elevation_m,
                 challenge_id=challenge_id,
             )
-            activity_info = self._get_activity_types(challenge_id=challenge_id).get(
-                activity_type, ACTIVITY_TYPES.get(activity_type, {})
-            )
-            base_pts = int(distance * activity_info["base_points"])
-            weight_bonus = total_points - base_pts  # uproszczone
-            if weight_kg and weight_kg > 0 and "obciążenie" in activity_info.get("bonuses", []):
-                 weight_bonus = (distance / 2 * activity_info["base_points"] )
-            else:
-                weight_bonus = 0
-            elevation_bonus = 0
-            if elevation_m and elevation_m > 0 and "przewyższenie" in activity_info.get("bonuses", []):
-                elevation_bonus = int((elevation_m / 50) * 500)
-                
+            if error:
+                logger.error(
+                    "Could not calculate points for payload",
+                    extra={
+                        "message_id": message.id,
+                        "activity_type": activity_type,
+                        "distance": distance,
+                        "error": error,
+                    },
+                )
+                return None
+
+            base_pts = points_breakdown["base_points"]
+            weight_bonus = points_breakdown["weight_bonus_points"]
+            elevation_bonus = points_breakdown["elevation_bonus_points"]
+            total_points = points_breakdown["total_points"]
             
             iid = self._create_unique_id(message)
             display_name = get_display_name(message.author)
@@ -1188,6 +1263,60 @@ class BotOrchestrator:
 
         return embed
 
+    def calculate_points_breakdown(
+        self,
+        activity_type: str,
+        distance: float,
+        weight: Optional[float] = None,
+        elevation: Optional[float] = None,
+        challenge_id: Optional[int] = None,
+    ) -> tuple[dict[str, int], str]:
+        """Zwraca spójny breakdown punktów i ich sumę dla aktywności."""
+        activity_types = self._get_activity_types(challenge_id=challenge_id)
+        if activity_type not in activity_types:
+            return {}, f"Nieznany typ aktywności: {activity_type}"
+
+        activity_info = activity_types[activity_type]
+        min_distance = activity_info.get("min_distance", 0)
+        if distance < min_distance:
+            return {}, f"Minimalny dystans dla {activity_info['display_name']}: {min_distance} km"
+
+        base_points_rate = activity_info["base_points"]
+        base_points = int(distance * base_points_rate)
+        bonuses = activity_info.get("bonuses", [])
+        points_rules = self._get_points_rules(challenge_id)
+
+        weight_bonus_points = 0
+        weight_bonus_cfg = points_rules.get("weight_bonus", {})
+        min_weight_kg = float(weight_bonus_cfg.get("min_weight_kg", 5))
+        distance_multiplier = float(weight_bonus_cfg.get("distance_points_multiplier", 1.5))
+        if (
+            weight
+            and weight >= min_weight_kg
+            and "obciążenie" in bonuses
+            and distance_multiplier > 1
+        ):
+            weight_bonus_points = int(base_points * (distance_multiplier - 1))
+
+        elevation_bonus_points = 0
+        elevation_bonus_cfg = points_rules.get("elevation_bonus", {})
+        meters_step = int(elevation_bonus_cfg.get("meters_step", 50))
+        points_per_step = int(elevation_bonus_cfg.get("points_per_step", 500))
+        if elevation and elevation > 0 and "przewyższenie" in bonuses and meters_step > 0:
+            elevation_bonus_points = int(elevation // meters_step) * points_per_step
+
+        total_points = base_points + weight_bonus_points + elevation_bonus_points
+        if total_points < 1:
+            base_points = 1
+            total_points = 1
+
+        return {
+            "base_points": base_points,
+            "weight_bonus_points": weight_bonus_points,
+            "elevation_bonus_points": elevation_bonus_points,
+            "total_points": total_points,
+        }, ""
+
     def calculate_points(
         self,
         activity_type: str,
@@ -1197,30 +1326,16 @@ class BotOrchestrator:
         challenge_id: Optional[int] = None,
     ) -> tuple[int, str]:
         """Oblicza punkty za aktywność zgodnie z wytycznymi konkursu."""
-        activity_types = self._get_activity_types(challenge_id=challenge_id)
-        if activity_type not in activity_types:
-            return 0, f"Nieznany typ aktywności: {activity_type}"
-
-        activity_info = activity_types[activity_type]
-
-        min_distance = activity_info.get("min_distance", 0)
-        if distance < min_distance:
-            return 0, f"Minimalny dystans dla {activity_info['display_name']}: {min_distance} km"
-
-        base_points = activity_info["base_points"]
-        points = int(distance * base_points)
-
-        bonuses = activity_info.get("bonuses", [])
-
-        if weight and weight > 0 and "obciążenie" in bonuses:
-            bonus = int((weight / 5) * (distance * base_points * 0.1))
-            points += bonus
-
-        if elevation and elevation > 0 and "przewyższenie" in bonuses:
-            bonus = int((elevation / 100) * (distance * base_points * 0.05))
-            points += bonus
-
-        return max(points, 1), ""
+        points_breakdown, error = self.calculate_points_breakdown(
+            activity_type,
+            distance,
+            weight=weight,
+            elevation=elevation,
+            challenge_id=challenge_id,
+        )
+        if error:
+            return 0, error
+        return points_breakdown["total_points"], ""
 
     async def sync_chat_history(self):
         """Synchronizuje historię czatu z Google Sheets - dodaje brakujące aktywności."""

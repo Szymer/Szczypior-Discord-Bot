@@ -5,12 +5,14 @@ from .anthropic_client import AnthropicClient
 from .base_client import BaseLLMClient
 from .gemini_client import GeminiClient
 from .openai_client import OpenAIClient
+from .openrouter_client import OpenRouterClient
 
 # Mapowanie nazw dostawców na klasy klientów
 CLIENT_MAP = {
     "gemini": GeminiClient,
     "anthropic": AnthropicClient,
     "openai": OpenAIClient,
+    "openrouter": OpenRouterClient,
 }
 
 
