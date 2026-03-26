@@ -10,6 +10,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
     emoji = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
     bonusPoints = serializers.SerializerMethodField()
+    pointsRules = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
@@ -22,6 +23,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
             "endDate",
             "goal",
             "bonusPoints",
+            "pointsRules",
             "isActive",
         ]
 
@@ -33,6 +35,10 @@ class ChallengeSerializer(serializers.ModelSerializer):
 
     def get_bonusPoints(self, obj):
         return (obj.rules or {}).get("bonus_points", 0)
+
+    def get_pointsRules(self, obj):
+        rules = (obj.rules or {}).get("points_rules")
+        return rules if isinstance(rules, dict) else None
 
 
 class ActivitySerializer(serializers.ModelSerializer):
@@ -287,6 +293,7 @@ class ChallengeAdminSerializer(serializers.ModelSerializer):
     emoji = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
     bonusPoints = serializers.SerializerMethodField()
+    pointsRules = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
@@ -299,6 +306,7 @@ class ChallengeAdminSerializer(serializers.ModelSerializer):
             "endDate",
             "goal",
             "bonusPoints",
+            "pointsRules",
             "isActive",
         ]
 
@@ -310,3 +318,7 @@ class ChallengeAdminSerializer(serializers.ModelSerializer):
 
     def get_bonusPoints(self, obj):
         return (obj.rules or {}).get("bonus_points", 0)
+
+    def get_pointsRules(self, obj):
+        rules = (obj.rules or {}).get("points_rules")
+        return rules if isinstance(rules, dict) else None
