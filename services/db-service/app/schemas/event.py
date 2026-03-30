@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class AirsoftEventCreate(BaseModel):
     name: str
     description: str | None = None
+    organizer: str | None = None
     start_date: datetime
     end_date: datetime | None = None
     location: str
@@ -20,6 +21,7 @@ class AirsoftEventRead(BaseModel):
     id: int
     name: str
     description: str | None
+    organizer: str | None
     start_date: datetime
     end_date: datetime | None
     location: str

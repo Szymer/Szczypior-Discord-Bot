@@ -131,6 +131,7 @@ class AirsoftEvent(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    organizer: Mapped[str | None] = mapped_column(Text)
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     location: Mapped[str] = mapped_column(Text, nullable=False)
