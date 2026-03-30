@@ -16,6 +16,7 @@ class EventsManager:
         event = AirsoftEvent(
             name=payload.name,
             description=payload.description,
+            organizer=payload.organizer,
             start_date=payload.start_date,
             end_date=payload.end_date,
             location=payload.location,

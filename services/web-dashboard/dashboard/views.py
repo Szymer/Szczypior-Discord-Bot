@@ -1,4 +1,5 @@
 import json
+import re
 import unicodedata
 from datetime import datetime
 from typing import Any
@@ -162,6 +163,24 @@ def _to_int_or_default(value: Any, default: int) -> int:
         return default
 
 
+def _parse_challenge_id(raw_value: str | None) -> int | None:
+    if raw_value is None:
+        return None
+
+    value = str(raw_value).strip()
+    if not value or value.lower() == "all":
+        return None
+
+    if value.isdigit():
+        return int(value)
+
+    match = re.search(r"(\d+)$", value)
+    if match:
+        return int(match.group(1))
+
+    raise ValueError("Invalid challengeId")
+
+
 def _normalize_points_rules(points_rules: dict[str, Any] | None) -> dict[str, dict[str, float | int]]:
     base_rules = {
         "weight_bonus": {
@@ -313,9 +332,14 @@ def activities(request):
 
     qs = Activity.objects.select_related("user").order_by("-created_at")
 
-    challenge_id = request.GET.get("challengeId")
-    if challenge_id:
-        qs = qs.filter(challenge_id=challenge_id)
+    challenge_id_raw = request.GET.get("challengeId")
+    if challenge_id_raw:
+        try:
+            challenge_id = _parse_challenge_id(challenge_id_raw)
+        except ValueError:
+            return JsonResponse({"error": "Invalid challengeId"}, status=400)
+        if challenge_id is not None:
+            qs = qs.filter(challenge_id=challenge_id)
 
     user_id = request.GET.get("userId")
     if user_id:
@@ -682,11 +706,13 @@ def admin_activities(request):
         qs = qs.filter(activity_type=db_type)
 
     challenge_id = request.GET.get("challengeId")
-    if challenge_id and challenge_id != "all":
+    if challenge_id:
         try:
-            qs = qs.filter(challenge_id=int(challenge_id))
-        except (ValueError, TypeError):
+            parsed_challenge_id = _parse_challenge_id(challenge_id)
+        except ValueError:
             return JsonResponse({"error": "Invalid challengeId"}, status=400)
+        if parsed_challenge_id is not None:
+            qs = qs.filter(challenge_id=parsed_challenge_id)
 
     date_from = request.GET.get("dateFrom")
     if date_from:
