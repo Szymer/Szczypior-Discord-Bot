@@ -25,6 +25,7 @@ class Challenge(models.Model):
     end_date = models.DateTimeField()
     rules = models.JSONField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    discord_channel_id = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
