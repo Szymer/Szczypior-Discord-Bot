@@ -7,6 +7,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
     startDate = serializers.DateTimeField(source="start_date", format="%Y-%m-%d")
     endDate = serializers.DateTimeField(source="end_date", format="%Y-%m-%d")
     isActive = serializers.BooleanField(source="is_active")
+    discordChannelId = serializers.CharField(source="discord_channel_id", allow_null=True, required=False)
     emoji = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
     bonusPoints = serializers.SerializerMethodField()
@@ -25,6 +26,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
             "bonusPoints",
             "pointsRules",
             "isActive",
+            "discordChannelId",
         ]
 
     def get_emoji(self, obj):
@@ -290,6 +292,7 @@ class ChallengeAdminSerializer(serializers.ModelSerializer):
     startDate = serializers.DateTimeField(source="start_date", format="%Y-%m-%d")
     endDate = serializers.DateTimeField(source="end_date", format="%Y-%m-%d")
     isActive = serializers.BooleanField(source="is_active")
+    discordChannelId = serializers.CharField(source="discord_channel_id", allow_null=True, required=False)
     emoji = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
     bonusPoints = serializers.SerializerMethodField()
@@ -308,6 +311,7 @@ class ChallengeAdminSerializer(serializers.ModelSerializer):
             "bonusPoints",
             "pointsRules",
             "isActive",
+            "discordChannelId",
         ]
 
     def get_emoji(self, obj):

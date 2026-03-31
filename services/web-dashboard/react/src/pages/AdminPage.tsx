@@ -130,6 +130,7 @@ interface AdminChallenge {
   goal: string;
   bonusPoints: number;
   isActive: boolean;
+  discordChannelId: string | null;
 }
 
 const getEventTypeLabel = (type: AdminEvent["type"]) => {
@@ -617,7 +618,7 @@ const EventsTab = () => {
 const ChallengesTab = () => {
   const [challenges, setChallenges] = useState<AdminChallenge[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", emoji: "💪", startDate: "", endDate: "", goal: "", bonusPoints: "" });
+  const [form, setForm] = useState({ name: "", description: "", emoji: "💪", startDate: "", endDate: "", goal: "", bonusPoints: "", discordChannelId: "" });
 
   const loadChallenges = async () => {
     const data = await djangoFetch<AdminChallenge[]>("/api/admin/challenges/");
@@ -635,7 +636,7 @@ const ChallengesTab = () => {
       body: JSON.stringify({ ...form, bonusPoints: parseInt(form.bonusPoints || "0", 10), isActive: false }),
     });
     setDialogOpen(false);
-    setForm({ name: "", description: "", emoji: "💪", startDate: "", endDate: "", goal: "", bonusPoints: "" });
+    setForm({ name: "", description: "", emoji: "💪", startDate: "", endDate: "", goal: "", bonusPoints: "", discordChannelId: "" });
     await loadChallenges();
   };
 
@@ -672,6 +673,7 @@ const ChallengesTab = () => {
                 <Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} className="bg-secondary border-border" />
               </div>
               <Input type="number" placeholder="Bonus punktowy" value={form.bonusPoints} onChange={e => setForm({ ...form, bonusPoints: e.target.value })} className="bg-secondary border-border" />
+              <Input placeholder="Discord Channel ID (opcjonalne)" value={form.discordChannelId} onChange={e => setForm({ ...form, discordChannelId: e.target.value })} className="bg-secondary border-border" />
               <Button onClick={createChallenge} className="w-full"><Plus className="w-4 h-4 mr-2" /> UTWÓRZ</Button>
             </div>
           </DialogContent>

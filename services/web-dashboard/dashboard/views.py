@@ -634,6 +634,7 @@ def admin_challenges(request):
         end_date=timezone.make_aware(end_date),
         rules=rules,
         is_active=bool(body.get("isActive", False)),
+        discord_channel_id=body.get("discordChannelId") or None,
     )
     return JsonResponse(ChallengeAdminSerializer(challenge).data, status=201)
 
@@ -668,6 +669,8 @@ def admin_challenge_detail(request, challenge_id: int):
         )
     if "isActive" in body:
         challenge.is_active = bool(body["isActive"])
+    if "discordChannelId" in body:
+        challenge.discord_channel_id = body["discordChannelId"] or None
 
     rules = dict(challenge.rules or {})
     if "emoji" in body:
