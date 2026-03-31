@@ -1,6 +1,10 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+COPY pyproject.toml .
+RUN uv pip install --system --no-cache fastapi uvicorn pydantic
+
 COPY . .
 CMD ["python", "-m", "app.main"]

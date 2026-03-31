@@ -3,7 +3,7 @@ name = "discord-bot-szczypior"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.9.0",
     "asyncpg>=0.29.0",
