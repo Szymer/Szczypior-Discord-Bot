@@ -29,3 +29,4 @@ primary_region = 'fra'
 # - DB_SERVICE_API_KEY
 # - GEMINI_API_KEY (opcjonalnie)
 # - GOOGLE_API_KEY (opcjonalnie)
+# - OPEN_ROUTER_API_KEY (opcjonalnie)
