@@ -72,10 +72,44 @@ class ConfigManager:
                 f"Domy\u015blny provider '{default_provider}' nie jest skonfigurowany w config.json. "
                 f"Dost\u0119pni providerzy: {list(config['llm_providers'].keys())}"
             )
+        
+            configured_order = config.get("llm_client_order", [])
+            if configured_order and isinstance(configured_order, list):
+                unknown = [
+                    str(provider)
+                    for provider in configured_order
+                    if str(provider).lower() not in config["llm_providers"]
+                ]
+                if unknown:
+                    raise ValueError(
+                        "Nieznani providerzy w 'llm_client_order': "
+                        f"{unknown}. Dostępni providerzy: {list(config['llm_providers'].keys())}"
+                    )
 
     def get_llm_provider(self) -> str:
         """Pobiera nazwę dostawcy LLM ze zmiennych środowiskowych lub zwraca domyślną."""
         return os.getenv("LLM_PROVIDER", "gemini").lower()
+
+    def get_llm_client_order(self) -> list[str]:
+        """Zwraca kolejność klientów LLM do fallbacku.
+
+        Priorytet:
+        1) env `LLM_CLIENT_ORDER` (np. "gemini,openrouter")
+        2) config.json -> `llm_client_order`
+        3) domyślnie [LLM_PROVIDER]
+        """
+        env_order = os.getenv("LLM_CLIENT_ORDER", "").strip()
+        if env_order:
+            providers = [p.strip().lower() for p in env_order.split(",") if p.strip()]
+            return providers or [self.get_llm_provider()]
+
+        config_order = self.config.get("llm_client_order")
+        if isinstance(config_order, list):
+            providers = [str(p).strip().lower() for p in config_order if str(p).strip()]
+            if providers:
+                return providers
+
+        return [self.get_llm_provider()]
 
     def get_llm_config(self, provider: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """

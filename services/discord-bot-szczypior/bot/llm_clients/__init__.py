@@ -16,6 +16,37 @@ CLIENT_MAP = {
 }
 
 
+def get_llm_client_for_provider(provider: str, **kwargs) -> BaseLLMClient:
+    """Tworzy klienta dla konkretnego providera."""
+    normalized_provider = (provider or "").lower().strip()
+    llm_config = config_manager.get_llm_config(normalized_provider)
+    if not llm_config:
+        raise ValueError(
+            f"Brak konfiguracji dla dostawcy LLM: '{normalized_provider}' w config.json."
+        )
+
+    client_class = CLIENT_MAP.get(normalized_provider)
+    if not client_class:
+        raise ValueError(
+            f"Nieobsługiwany dostawca LLM: '{normalized_provider}'. Dostępni dostawcy: {list(CLIENT_MAP.keys())}"
+        )
+
+    constructor_args = {
+        "model_name": llm_config.get("default_model"),
+        "generation_params": config_manager.get_llm_generation_params(normalized_provider),
+    }
+    constructor_args.update(kwargs)
+    return client_class(**constructor_args)
+
+
+def get_llm_clients(provider_order: list[str]) -> list[BaseLLMClient]:
+    """Tworzy listę klientów LLM w podanej kolejności fallbacku."""
+    clients: list[BaseLLMClient] = []
+    for provider in provider_order:
+        clients.append(get_llm_client_for_provider(provider))
+    return clients
+
+
 def get_llm_client(**kwargs) -> BaseLLMClient:
     """
     Fabryka do tworzenia instancji klienta LLM.
@@ -29,28 +60,4 @@ def get_llm_client(**kwargs) -> BaseLLMClient:
         Instancja odpowiedniego klienta LLM.
     """
     provider = config_manager.get_llm_provider()
-    llm_config = config_manager.get_llm_config(provider)
-
-    if not llm_config:
-        raise ValueError(f"Brak konfiguracji dla dostawcy LLM: '{provider}' w config.json.")
-
-    client_class = CLIENT_MAP.get(provider)
-
-    if not client_class:
-        raise ValueError(
-            f"Nieobsługiwany dostawca LLM: '{provider}'. Dostępni dostawcy: {list(CLIENT_MAP.keys())}"
-        )
-
-    # Przygotuj argumenty dla konstruktora klienta
-    constructor_args = {}
-
-    # 1. Użyj modelu z config.json jako domyślnego
-    constructor_args["model_name"] = llm_config.get("default_model")
-
-    # 2. Pobierz parametry generowania
-    constructor_args["generation_params"] = config_manager.get_llm_generation_params(provider)
-
-    # 3. Nadpisz argumenty tymi przekazanymi do fabryki (np. model_name z polecenia)
-    constructor_args.update(kwargs)
-
-    return client_class(**constructor_args)
+    return get_llm_client_for_provider(provider, **kwargs)

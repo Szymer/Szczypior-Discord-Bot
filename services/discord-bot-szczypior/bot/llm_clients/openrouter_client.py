@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any, Dict, Optional
 
@@ -79,6 +80,20 @@ class OpenRouterClient(BaseLLMClient):
             if merged:
                 return merged
 
+        return None
+
+    @staticmethod
+    def _clean_json_response(text: str) -> str:
+        return text.strip().replace("```json", "").replace("```", "").strip()
+
+    @staticmethod
+    def _safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            return None
         return None
 
     def generate_text(
@@ -170,9 +185,88 @@ class OpenRouterClient(BaseLLMClient):
         prompt: str,
         system_instruction: Optional[str] = None,
     ) -> Dict[str, Any]:
-        raise NotImplementedError(
-            "Metoda `analyze_image` nie jest jeszcze zaimplementowana dla OpenRouterClient."
-        )
+        if not image_url or not image_url.strip():
+            raise ValueError("image_url nie może być pusty.")
+        if not prompt or not prompt.strip():
+            raise ValueError("Prompt nie może być pusty.")
+
+        resolved_temperature = self.generation_params.get("temperature", 0.2)
+        resolved_max_tokens = self.generation_params.get("max_tokens", 2048)
+
+        model_kwargs: Dict[str, Any] = {}
+        if self._extra_headers:
+            model_kwargs["extra_headers"] = self._extra_headers
+
+        content: list[Dict[str, Any]] = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": image_url}},
+        ]
+
+        messages = []
+        if system_instruction:
+            messages.append(SystemMessage(content=system_instruction))
+        messages.append(HumanMessage(content=content))
+
+        candidate_models: list[str] = [self.model_name]
+        for model in self._fallback_models():
+            if model not in candidate_models:
+                candidate_models.append(model)
+
+        last_error: Optional[Exception] = None
+        for candidate in candidate_models:
+            try:
+                llm = ChatOpenAI(
+                    model=candidate,
+                    api_key=self._api_key,
+                    base_url=self._base_url,
+                    temperature=float(resolved_temperature),
+                    max_tokens=int(resolved_max_tokens),
+                    model_kwargs=model_kwargs,
+                )
+
+                response = llm.invoke(messages)
+                content_text = self._extract_text_content(getattr(response, "content", None))
+                if not content_text:
+                    last_error = ValueError(
+                        f"Model {candidate} zwrócił pustą treść odpowiedzi dla analizy obrazu."
+                    )
+                    continue
+
+                cleaned = self._clean_json_response(content_text)
+                parsed = self._safe_json_loads(cleaned)
+                if parsed is not None:
+                    if candidate != self.model_name:
+                        self.model_name = candidate
+                    return parsed
+
+                last_error = ValueError(
+                    f"Model {candidate} zwrócił niepoprawny JSON dla analizy obrazu."
+                )
+            except (
+                APIConnectionError,
+                APIError,
+                APITimeoutError,
+                AuthenticationError,
+                BadRequestError,
+                ConflictError,
+                InternalServerError,
+                NotFoundError,
+                PermissionDeniedError,
+                RateLimitError,
+                UnprocessableEntityError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as exc:
+                last_error = exc
+
+        if last_error:
+            raise RuntimeError(
+                "OpenRouter (LangChain) nie zwrócił poprawnej odpowiedzi dla analizy obrazu "
+                f"na żadnym modelu ({candidate_models}). Ostatni błąd: {last_error}"
+            ) from last_error
+
+        raise RuntimeError("OpenRouter (LangChain) nie miał dostępnych modeli do analizy obrazu.")
 
     def get_model_info(self) -> Dict[str, Any]:
         return {

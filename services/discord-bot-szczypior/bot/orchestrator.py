@@ -26,12 +26,18 @@ logger = logging.getLogger(__name__)
 class BotOrchestrator:
     """Orkiestruje logikę biznesową bota."""
 
-    def __init__(self, bot, gemini_client, api_manager: APIManager):
+    def __init__(
+        self,
+        bot,
+        api_manager: Optional[APIManager] = None,
+        llm_clients: Optional[List[Any]] = None,
+        sheets_manager: Any = None,
+    ):
         self.bot = bot
-        self.gemini_client = gemini_client
+        self.llm_clients: List[Any] = [c for c in (llm_clients or []) if c is not None]
         self.api_manager = api_manager
         # kept for backward-compat with sync_chat_history (not called in normal flow)
-        self.sheets_manager = None
+        self.sheets_manager = sheets_manager
         self.activity_keywords = config_manager.get_activity_keywords()
         # Cache: challenge_id -> activity types dict (same shape as ACTIVITY_TYPES)
         self._rules_cache: dict[int, dict[str, Any]] = {}
@@ -46,6 +52,134 @@ class BotOrchestrator:
             50,
             int(os.getenv("STARTUP_SYNC_MAX_USER_IID_CACHE", "1000")),
         )
+
+    @staticmethod
+    def _is_temporary_llm_error(error_text: str) -> bool:
+        text = (error_text or "").lower()
+        return any(
+            token in text
+            for token in (
+                "503",
+                "unavailable",
+                "high demand",
+                "resource_exhausted",
+                "rate limit",
+                "quota exceeded",
+                "backend error",
+            )
+        )
+
+    def _llm_clients_for_failover(self) -> list[tuple[str, Any]]:
+        clients: list[tuple[str, Any]] = []
+        for idx, client in enumerate(self.llm_clients):
+            if client is None:
+                continue
+            try:
+                model_info = client.get_model_info() if hasattr(client, "get_model_info") else {}
+                provider_name = str(model_info.get("provider") or model_info.get("model_name") or f"client_{idx}")
+            except Exception:
+                provider_name = f"client_{idx}"
+            clients.append((provider_name, client))
+
+        return clients
+
+    @staticmethod
+    def _prompt_provider() -> str:
+        order = config_manager.get_llm_client_order()
+        if order:
+            return order[0]
+        return config_manager.get_llm_provider()
+
+    def _first_client_with_method(self, method_name: str) -> Optional[Any]:
+        for _, client in self._llm_clients_for_failover():
+            if hasattr(client, method_name):
+                return client
+        return None
+
+    def _should_try_next_client_from_result(self, result: Optional[Dict[str, Any]]) -> bool:
+        if not isinstance(result, dict):
+            return False
+
+        comment = str(result.get("komentarz") or "")
+        if not comment:
+            return False
+
+        return self._is_temporary_llm_error(comment)
+
+    async def _analyze_image_with_failover(
+        self,
+        image_url: str,
+        prompt: str,
+        system_prompt: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        clients = self._llm_clients_for_failover()
+        last_result: Optional[Dict[str, Any]] = None
+
+        for client_name, client in clients:
+            try:
+                result = client.analyze_image(
+                    image_url,
+                    prompt,
+                    system_instruction=system_prompt,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Image analysis failed on LLM client",
+                    exc_info=True,
+                    extra={"client": client_name},
+                )
+                if self._is_temporary_llm_error(str(exc)):
+                    continue
+                last_result = {
+                    "typ_aktywnosci": None,
+                    "dystans": None,
+                    "komentarz": f"Błąd analizy obrazu: {exc}",
+                }
+                continue
+
+            if self._should_try_next_client_from_result(result):
+                logger.warning(
+                    "Temporary LLM error detected in analysis result, trying fallback client",
+                    extra={"client": client_name, "comment": result.get("komentarz")},
+                )
+                last_result = result
+                continue
+
+            return result
+
+        return last_result
+
+    async def _generate_text_with_failover(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+    ) -> Optional[str]:
+        clients = self._llm_clients_for_failover()
+        loop = asyncio.get_event_loop()
+
+        for client_name, client in clients:
+            try:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda c=client: c.generate_text(
+                        prompt,
+                        system_instruction=system_prompt,
+                    ),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Text analysis failed on LLM client",
+                    exc_info=True,
+                    extra={"client": client_name},
+                )
+                if self._is_temporary_llm_error(str(exc)):
+                    continue
+                continue
+
+            if response and response.strip():
+                return response
+
+        return None
 
     def _get_activity_types(
         self,
@@ -349,7 +483,7 @@ class BotOrchestrator:
             return None
             
         # Get provider and prompts from config
-        provider = config_manager.get_llm_provider()
+        provider = self._prompt_provider()
         system_prompt = config_manager.get_system_prompt(provider)
         prompts = config_manager.get_llm_prompts(provider)
         
@@ -396,11 +530,15 @@ class BotOrchestrator:
                     user_history=user_history_text
                 )
                 
-                analysis_result = self.gemini_client.analyze_image(
+                analysis_result = await self._analyze_image_with_failover(
                     image_url,
                     user_prompt,
-                    system_instruction=system_prompt
+                    system_prompt,
                 )
+
+                if not analysis_result:
+                    logger.info("Image analysis failed on all configured LLM clients")
+                    return None
                 
                 logger.info(
                     "AI image analysis result",
@@ -421,13 +559,14 @@ class BotOrchestrator:
                 if is_low_contrast and has_no_data:
                     logger.warning("Low contrast detected, retrying with better model")
                     try:
-                        analysis_result = self.gemini_client.analyze_image_with_better_model(
-                            image_url,
-                            user_prompt,
-                            system_instruction=system_prompt,
-                            better_model="models/gemini-2.0-flash-exp"
-                        )
-                        logger.info("Retry with better model succeeded", extra={"analysis": analysis_result})
+                        better_model_client = self._first_client_with_method("analyze_image_with_better_model")
+                        if better_model_client:
+                            analysis_result = better_model_client.analyze_image_with_better_model(
+                                image_url,
+                                user_prompt,
+                                system_instruction=system_prompt,
+                            )
+                            logger.info("Retry with better model succeeded", extra={"analysis": analysis_result})
                     except Exception:
                         logger.warning("Better model retry failed, using original result", exc_info=True)
                 
@@ -447,12 +586,7 @@ class BotOrchestrator:
                 
                 user_prompt = prompt_template.format(text=text)
                 
-                # Execute in thread pool to avoid blocking
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.gemini_client.generate_text(user_prompt, system_instruction=system_prompt)
-                )
+                response = await self._generate_text_with_failover(user_prompt, system_prompt)
                 
                 if not response:
                     logger.info("AI returned no response for text analysis")
@@ -783,7 +917,7 @@ class BotOrchestrator:
             logger.warning("Startup sync skipped: api_manager not available")
             return summary
 
-        if not self.gemini_client:
+        if not self._llm_clients_for_failover():
             logger.warning("Startup sync skipped: llm client not available")
             return summary
 
@@ -1047,16 +1181,13 @@ class BotOrchestrator:
         )
         
         # Pobierz globalny system_prompt
-        provider = config_manager.get_llm_provider()
+        provider = self._prompt_provider()
         system_prompt = config_manager.get_system_prompt(provider)
 
         try:
-            raw_response = self.gemini_client.generate_text(
-                user_prompt, 
-                temperature=0.8, 
-                max_tokens=200,
-                system_instruction=system_prompt
-            )
+            raw_response = await self._generate_text_with_failover(user_prompt, system_prompt)
+            if not raw_response:
+                return "Dobra robota!"
             return self._extract_motivational_comment(raw_response)
         except (LLMAnalysisError, LLMTimeoutError):
             logger.error("Failed to generate AI comment", exc_info=True)
@@ -1339,8 +1470,8 @@ class BotOrchestrator:
 
     async def sync_chat_history(self):
         """Synchronizuje historię czatu z Google Sheets - dodaje brakujące aktywności."""
-        if not self.sheets_manager or not self.gemini_client:
-            logger.warning("Sync skipped: sheets_manager or gemini_client not available")
+        if not self.sheets_manager or not self._llm_clients_for_failover():
+            logger.warning("Sync skipped: sheets_manager or llm clients not available")
             return
 
         try:
@@ -1660,7 +1791,7 @@ class BotOrchestrator:
             total_distance, total_points, activity_count = 0, 0, 0
 
         # Pobierz szablon promptu z konfiguracji
-        provider = config_manager.get_llm_provider()
+        provider = self._prompt_provider()
         prompts = config_manager.get_llm_prompts(provider)
 
         prompt_template = prompts.get("motivational_comment")

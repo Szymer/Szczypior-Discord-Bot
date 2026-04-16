@@ -9,8 +9,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from bot.constants import ACTIVITY_TYPES
 from bot.orchestrator import BotOrchestrator
 
-# Utwórz instancję orkiestratora do testów (bez bot, llm_client i sheets_manager)
-orchestrator = BotOrchestrator(bot=None, gemini_client=None, sheets_manager=None)
+# Utwórz instancję orkiestratora do testów (bez bot, llm_clients i sheets_manager)
+orchestrator = BotOrchestrator(bot=None, llm_clients=[], sheets_manager=None)
 
 
 def test_bieganie_teren_basic():

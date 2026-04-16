@@ -110,6 +110,9 @@ class GeminiClient(BaseLLMClient):
             or "quota exceeded" in message
             or "rate limit" in message
             or "429" in message
+            or "unavailable" in message
+            or "high demand" in message
+            or "503" in message
         )
 
     @staticmethod
@@ -422,7 +425,11 @@ class GeminiClient(BaseLLMClient):
                     print(f"Prompt feedback: {model_response.prompt_feedback}")
             except Exception:
                 pass
-            return {"typ_aktywnosci": None, "dystans": None, "komentarz": "Błąd analizy obrazu"}
+            return {
+                "typ_aktywnosci": None,
+                "dystans": None,
+                "komentarz": f"Błąd analizy obrazu: {e}",
+            }
 
     def analyze_image_with_better_model(
         self, 

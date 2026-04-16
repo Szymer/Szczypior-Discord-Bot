@@ -12,8 +12,9 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from api_menager import APIManager, APIManagerError, APIManagerHTTPError
+from config_manager import config_manager
 from constants import ACTIVITY_TYPES
-from llm_clients import get_llm_client
+from llm_clients import get_llm_clients
 from orchestrator import BotOrchestrator
 from utils import (
     get_display_name,
@@ -66,8 +67,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Globalny APIManager
 api_manager: Optional[APIManager] = None
 
-# Klient LLM
-llm_client = None
+# Klienci LLM w kolejności fallbacku
+llm_clients = []
 
 # Orkiestrator
 orchestrator = None
@@ -85,7 +86,7 @@ startup_sync_completed = False
 @bot.event
 async def on_ready():
     """Wywoływane gdy bot jest gotowy."""
-    global api_manager, llm_client, orchestrator, monitored_channel_ids, channel_to_challenge, startup_sync_completed
+    global api_manager, llm_clients, orchestrator, monitored_channel_ids, channel_to_challenge, startup_sync_completed
     logger.info(f"{bot.user} is online", extra={"bot_id": bot.user.id})
     active_challenges = []
 
@@ -164,16 +165,34 @@ async def on_ready():
     if not monitored_channel_ids:
         logger.warning("No monitored channels configured – bot will process ALL channels")
 
-    # Inicjalizacja LLM Client
+    # Inicjalizacja klientów LLM
     try:
-        llm_client = get_llm_client()
-        model_info = llm_client.get_model_info()
-        logger.info("LLM Client connected", extra={"model": model_info.get('model_name', 'unknown')})
+        provider_order = config_manager.get_llm_client_order()
+        llm_clients = get_llm_clients(provider_order)
+        connected_models = []
+        for client in llm_clients:
+            model_info = client.get_model_info()
+            connected_models.append(
+                model_info.get("model_name") or model_info.get("provider") or "unknown"
+            )
+        logger.info(
+            "LLM clients connected",
+            extra={
+                "provider_order": provider_order,
+                "models": connected_models,
+                "count": len(llm_clients),
+            },
+        )
     except Exception:
-        logger.warning("LLM Client unavailable", exc_info=True)
+        llm_clients = []
+        logger.warning("LLM clients unavailable", exc_info=True)
 
     # Inicjalizacja orkiestratora
-    orchestrator = BotOrchestrator(bot, llm_client, api_manager)
+    orchestrator = BotOrchestrator(
+        bot=bot,
+        api_manager=api_manager,
+        llm_clients=llm_clients,
+    )
 
     # Monitor pamięci - PO INICJALIZACJI
     if process:
@@ -519,8 +538,8 @@ async def podsumowanie(
         await interaction.followup.send("❌ API nie jest dostępne.")
         return
 
-    if not llm_client:
-        await interaction.followup.send("❌ AI Client nie jest skonfigurowany.")
+    if not llm_clients:
+        await interaction.followup.send("❌ AI Clients nie są skonfigurowane.")
         return
 
     try:
@@ -591,7 +610,8 @@ async def okres_autocomplete(
 async def _generate_ai_summary_from_rankings(top_users, period: str) -> str:
     try:
         from .config_manager import config_manager
-        provider = config_manager.get_llm_provider()
+        provider_order = config_manager.get_llm_client_order()
+        provider = provider_order[0] if provider_order else config_manager.get_llm_provider()
         system_prompt = config_manager.get_system_prompt(provider)
 
         top_lines = "\n".join(
@@ -604,9 +624,13 @@ async def _generate_ai_summary_from_rankings(top_users, period: str) -> str:
             "Ton entuzjastyczny, max 2 emoji, bez markdown."
         )
 
-        response = llm_client.generate_text(prompt, system_instruction=system_prompt)
-        if response:
-            return response.replace('**', '').replace('__', '').replace('*', '')
+        for client in llm_clients:
+            try:
+                response = client.generate_text(prompt, system_instruction=system_prompt)
+                if response:
+                    return response.replace('**', '').replace('__', '').replace('*', '')
+            except Exception:
+                logger.warning("AI summary generation failed on one client, trying next", exc_info=True)
     except Exception:
         logger.error("Failed to generate AI summary", exc_info=True)
 
