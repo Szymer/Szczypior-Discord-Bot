@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS challenges (
     end_date TIMESTAMP WITH TIME ZONE NOT NULL,
     rules JSONB,
     is_active BOOLEAN DEFAULT TRUE,
+    discord_channel_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
