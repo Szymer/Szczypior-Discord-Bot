@@ -8,7 +8,7 @@ echo "🧪 Testowanie Web Dashboard Dockerfile lokalnie..."
 # Build obrazu
 echo "📦 Budowanie obrazu..."
 cd /workspaces/Szczypior-Discord-Bot
-docker build -f infrastructure/docker/web-dashboard.Dockerfile -t szczypior-web-dashboard:test .
+docker build -f infrastructure/docker/web-dashboard/Dockerfile -t szczypior-web-dashboard:test .
 
 echo "✅ Obraz zbudowany pomyślnie!"
 echo ""

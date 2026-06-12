@@ -54,7 +54,7 @@ cd /workspaces/Szczypior-Discord-Bot
 cp services/db-service/fly.toml ./fly.toml.tmp
 
 # Zaktualizuj ścieżkę Dockerfile
-sed -i 's|dockerfile = "../../infrastructure/docker/db-service.Dockerfile"|dockerfile = "infrastructure/docker/db-service.Dockerfile"|' ./fly.toml.tmp
+sed -i 's|dockerfile = "../../infrastructure/docker/db-service/Dockerfile"|dockerfile = "infrastructure/docker/db-service/Dockerfile"|' ./fly.toml.tmp
 
 # Deploy
 fly deploy --ha=false -a "$APP_NAME" -c fly.toml.tmp
