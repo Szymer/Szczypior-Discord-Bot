@@ -8,24 +8,17 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-
 COPY services/db-service/pyproject.toml services/db-service/uv.lock ./db-service/
-
-
 COPY libs ./libs
 
-
 WORKDIR /app/db-service
-
 
 RUN uv sync \
     --frozen \
     --no-install-project \
     --no-dev
 
-
 COPY services/db-service /app/db-service
-
 
 RUN uv sync \
     --frozen \
@@ -33,12 +26,16 @@ RUN uv sync \
 
 FROM python:3.13-slim AS runtime
 
-ENV PATH="/app/db-service/.venv/bin:$PATH"
+# Kopiowanie obrazu uv, jeśli chcesz uruchamiać przez "uv run" (opcjonalnie, ale bezpieczniej)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 WORKDIR /app/db-service
 
+# Kopiowanie plików z etapu build
 COPY --from=build /app /app
 
-EXPOSE 8080
+# Cloud Run dynamicznie przypisuje PORT, usunięto sztywne EXPOSE
+ENV PORT=8080
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Uruchomienie bezpośrednio z pliku binarnego w środowisku wirtualnym
+CMD ["/app/db-service/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
