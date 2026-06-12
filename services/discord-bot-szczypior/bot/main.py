@@ -4,6 +4,15 @@ import logging
 import os
 import sys
 from datetime import datetime, timedelta
+
+# Upewnij sie, ze sys.path zawiera katalogi potrzebne niezaleznie od CWD/debuggera.
+_BOT_DIR = os.path.dirname(os.path.abspath(__file__))          # .../bot/
+_SVC_DIR = os.path.dirname(_BOT_DIR)                           # .../discord-bot-szczypior/
+_REPO_ROOT = os.path.dirname(os.path.dirname(_SVC_DIR))        # .../Szczypior-Discord-Bot/
+for _p in (_SVC_DIR, _REPO_ROOT):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from typing import Optional
 
 import discord

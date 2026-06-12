@@ -38,7 +38,7 @@ class APIManager:
 
     def __init__(self, base_url: str | None = None, timeout_seconds: int = 15):
         configured_base_url = base_url or config_manager.get_db_service_base_url()
-        self.api_base_url = self._normalize_api_base_url(configured_base_url)
+        self.api_base_url = self._normalize_api_base_url(configured_base_url, "https://dbservices-1034123315812.europe-west1.run.app")
         # self.api_base_url = self._normalize_api_base_url('http://localhost:8080')
 
         self.timeout_seconds = timeout_seconds

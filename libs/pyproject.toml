@@ -1,0 +1,11 @@
+[project]
+name = "libs-shared"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.5.0",
+]
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["libs*"]
