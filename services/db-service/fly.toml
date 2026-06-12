@@ -3,7 +3,7 @@ app = 'szczypior-db-service'
 primary_region = 'fra'
 
 [build]
-  dockerfile = "../../infrastructure/docker/db-service.Dockerfile"
+  dockerfile = "../../infrastructure/docker/db-service/Dockerfile"
 
 [http_service]
   internal_port = 80

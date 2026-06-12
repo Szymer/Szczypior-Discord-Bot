@@ -65,7 +65,7 @@ cd /workspaces/Szczypior-Discord-Bot
 cp services/discord-bot-szczypior/fly.toml ./fly.toml.bot.tmp
 
 # Zaktualizuj ścieżkę Dockerfile
-sed -i 's|dockerfile = "../../infrastructure/docker/discord-bot.Dockerfile"|dockerfile = "infrastructure/docker/discord-bot.Dockerfile"|' ./fly.toml.bot.tmp
+sed -i 's|dockerfile = "../../infrastructure/docker/discord-bot/Dockerfile"|dockerfile = "infrastructure/docker/discord-bot/Dockerfile"|' ./fly.toml.bot.tmp
 
 # Deploy
 fly deploy --ha=false -a "$APP_NAME" -c fly.toml.bot.tmp

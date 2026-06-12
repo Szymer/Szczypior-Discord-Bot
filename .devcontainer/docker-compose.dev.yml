@@ -2,7 +2,7 @@ services:
   workspace:
     build:
       context: ..
-      dockerfile: infrastructure/docker/workspace.Dockerfile
+      dockerfile: infrastructure/docker/workspace/Dockerfile
     volumes:
       - ..:/workspaces/Szczypior-Discord-Bot:cached
       - /var/run/docker.sock:/var/run/docker.sock
@@ -22,7 +22,7 @@ services:
   db-service:
     build:
       context: ..
-      dockerfile: infrastructure/docker/db-service.Dockerfile
+      dockerfile: infrastructure/docker/db-service/Dockerfile
     env_file:
       - ../.env
     volumes:
@@ -37,7 +37,7 @@ services:
   discord-bot:
     build:
       context: ..
-      dockerfile: infrastructure/docker/discord-bot.Dockerfile
+      dockerfile: infrastructure/docker/discord-bot/Dockerfile
     env_file:
       - ../.env
     environment:
@@ -51,7 +51,7 @@ services:
     # Dedykowany obraz developerski dla lokalnego Django.
     build:
       context: ..
-      dockerfile: infrastructure/docker/web-dashboard-dev.Dockerfile
+      dockerfile: infrastructure/docker/web-dashboard-dev/Dockerfile
     env_file:
       - ../.env
     ports:
@@ -63,7 +63,7 @@ services:
   web-frontend:
     build:
       context: ..
-      dockerfile: infrastructure/docker/web-dashboard-react.Dockerfile
+      dockerfile: infrastructure/docker/web-dashboard-react/Dockerfile
     ports:
       - "8002:80"
     networks:
@@ -73,7 +73,7 @@ services:
   web-frontend-dev:
     build:
       context: ..
-      dockerfile: infrastructure/docker/web-dashboard-react-dev.Dockerfile
+      dockerfile: infrastructure/docker/web-dashboard-react-dev/Dockerfile
     working_dir: /app
     env_file:
       - ../.env
