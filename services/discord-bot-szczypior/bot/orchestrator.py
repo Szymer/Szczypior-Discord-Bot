@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import discord
 
-from api_menager import APIManager, APIManagerError, APIManagerHTTPError
+from api.api_menager import APIManager, APIManagerError, APIManagerHTTPError  # pyright: ignore[reportMissingImports]
 from config_manager import config_manager
 from constants import ACTIVITY_TYPES
 from exceptions import (
@@ -20,7 +20,7 @@ from exceptions import (
 from libs.shared.schemas.challenge import ChallengeRead
 from utils import get_display_name, parse_distance
 
-from ai.chains import anlize_message_and_picture
+from ai.chains import analyze_message_and_picture
 
 logger = logging.getLogger(__name__)
 
@@ -533,7 +533,11 @@ class BotOrchestrator:
                     user_history=user_history_text
                 )
                 
-                analysis_result = await anlize_message_and_picture(user_mesage=text or "", pict_url=image_url, context=user_history_text)
+                analysis_result = await analyze_message_and_picture(
+                    user_message=text or "",
+                    picture_url=image_url,
+                    activities_context=user_history_text,
+                )
                 # analysis_result = await self._analyze_image_with_failover(
                 #     image_url,
                 #     user_prompt,
@@ -1751,6 +1755,7 @@ class BotOrchestrator:
         self, current_activity: Dict[str, Any], previous_activities: List[Dict[str, Any]]
     ) -> str:
         """Buduje prompt do wygenerowania komentarza motywacyjnego."""
+        #to zrobi graph 
         logger.info(
             "🔍 DEBUG: Building motivational prompt",
             extra={
