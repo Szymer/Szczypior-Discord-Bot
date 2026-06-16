@@ -69,9 +69,5 @@ async def invoke_message_analysis(request: Any) -> dict[str, Any]:
 
 async def process_discord_message(request: Any) -> dict[str, Any]:
 	"""Compatibility entrypoint used by bot.message_handler."""
-	try:
-		return await invoke_message_analysis(request)
-	except Exception:
-		logger.exception("invoke_message_analysis failed")
-		return {"status": "ignored"}
+	return await invoke_message_analysis(request)
 
