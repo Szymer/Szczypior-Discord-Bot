@@ -128,7 +128,7 @@ class DiscordMessageHandler:
             return
 
         # Skip duplicate activity messages before any AI call.
-        if (has_keywords or has_image) and self._activity_already_exists(message):
+        if (has_keywords or has_image) and await self._activity_already_exists(message):
             logger.info(
                 "Skipping duplicate message",
                 extra={"message_id": message.id, "author": str(message.author)},
@@ -231,7 +231,7 @@ class DiscordMessageHandler:
 
                 summary["queued"] += 1
 
-                if self._activity_already_exists(message):
+                if await self._activity_already_exists(message):
                     summary["duplicates"] += 1
                     continue
 
@@ -309,13 +309,15 @@ class DiscordMessageHandler:
         timestamp_int = int(message.created_at.timestamp())
         return f"{timestamp_int}_{message.id}"
 
-    def _activity_already_exists(self, message: discord.Message) -> bool:
+    async def _activity_already_exists(self, message: discord.Message) -> bool:
         if self._api_manager is None:
             return False
 
+        import asyncio
+
         iid = self._create_unique_id(message)
         try:
-            self._api_manager.get_activity(iid)
+            await asyncio.to_thread(self._api_manager.get_activity, iid)
             return True
         except APIManagerHTTPError as exc:
             if getattr(exc, "status_code", None) == 404:
