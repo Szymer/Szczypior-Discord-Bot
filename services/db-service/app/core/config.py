@@ -15,10 +15,10 @@ class Settings(BaseSettings):
     api_key_header_name: str = Field(default="X-API-Key", alias="DB_SERVICE_API_KEY_HEADER")
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     db_user: str | None = Field(default=None, alias="user")
-    db_password: str | None = Field(default=None, alias="password")
-    db_host: str | None = Field(default=None, alias="host")
-    db_port: int | None = Field(default=None, alias="port")
-    db_name: str | None = Field(default=None, alias="dbname")
+    db_password: str | None = Field(default=None, alias="DB_PASSWORD")
+    db_host: str | None = Field(default=None, alias="DB_HOST")
+    db_port: int | None = Field(default=6543, alias="DB_PORT")
+    db_name: str | None = Field(default=None, alias="DB_NAME")
 
     @cached_property
     def resolved_database_url(self) -> str:
