@@ -7,11 +7,6 @@ import os
 from typing import Any
 from urllib import error, parse, request
 
-try:
-    from bot.config_manager import config_manager
-except ImportError:
-    from config_manager import config_manager
-
 from libs.shared.schemas.activity import (
     ActivityCreate,
     ActivityRead,
@@ -41,7 +36,11 @@ class APIManager:
     """Klient API dla operacji na db-service."""
 
     def __init__(self, base_url: str | None = None, timeout_seconds: int = 15):
-        configured_base_url = base_url or config_manager.get_db_service_base_url()
+        configured_base_url = base_url or os.getenv("DB_SERVICE_BASE_URL") or os.getenv("API_URL")
+        if not configured_base_url:
+            raise APIManagerError(
+                "Brak DB_SERVICE_BASE_URL (lub API_URL). Ustaw URL db-service w .env."
+            )
         self.api_base_url = self._normalize_api_base_url(configured_base_url)
 
         self.timeout_seconds = timeout_seconds

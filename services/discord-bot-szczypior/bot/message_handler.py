@@ -11,14 +11,6 @@ from typing import Any, Optional, Protocol
 import discord
 
 try:
-    from bot.config_manager import config_manager
-except ImportError:
-    try:
-        from config_manager import config_manager  # type: ignore
-    except Exception:
-        config_manager = None
-
-try:
     from api.api_menager import APIManager, APIManagerError, APIManagerHTTPError
 except Exception:
     APIManager = None  # type: ignore
@@ -29,6 +21,7 @@ except Exception:
     class APIManagerHTTPError(APIManagerError):
         status_code: int = 0
 
+from libs.shared.constants import ACTIVITY_KEYWORDS
 from libs.shared.schemas.challenge import ChallengeRead
 
 logger = logging.getLogger(__name__)
@@ -273,10 +266,22 @@ class DiscordMessageHandler:
         return (has_activity_keywords or has_image), has_activity_keywords, has_image
 
     def _load_activity_keywords(self) -> dict[str, list[str]]:
-        if config_manager is None:
-            return {}
         try:
-            return config_manager.get_activity_keywords()
+            if isinstance(ACTIVITY_KEYWORDS, dict):
+                return {
+                    str(activity_type): [str(keyword) for keyword in keywords]
+                    for activity_type, keywords in ACTIVITY_KEYWORDS.items()
+                }
+
+            # Backward-compatible guard for malformed constant shape.
+            if isinstance(ACTIVITY_KEYWORDS, tuple) and ACTIVITY_KEYWORDS and isinstance(ACTIVITY_KEYWORDS[0], dict):
+                return {
+                    str(activity_type): [str(keyword) for keyword in keywords]
+                    for activity_type, keywords in ACTIVITY_KEYWORDS[0].items()
+                }
+
+            logger.warning("ACTIVITY_KEYWORDS has unsupported format")
+            return {}
         except Exception:
             logger.warning("Could not load activity keywords", exc_info=True)
             return {}

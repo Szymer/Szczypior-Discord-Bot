@@ -26,4 +26,5 @@ class ActivityState(TypedDict):
     created_at: NotRequired[str | None]
     comment: NotRequired[str]
     historic_activities: NotRequired[list[ActivityRead]]
+    meets_minimum_distance_rule: NotRequired[bool]
     

@@ -17,8 +17,7 @@ from api.api_menager import APIManager, get_user_activity_history, save_activity
 
 from libs.shared.schemas.activity import ActivityRead
 from ai.schemas import ActivityState
-from utils.calculations import build_activity_create_from_ai_response  # pyright: ignore[reportMissingImports]
-
+from utils.calculations import build_activity_create_from_ai_response, _resolve_activity_types  
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +34,7 @@ def _build_iid(message_id: str, created_at: datetime) -> str:
     
     
 def build_activity_state_graph() -> StateGraph[ActivityState]:
+    
     graph = StateGraph(ActivityState)
     api_manager: APIManager | None = None
     channel_to_challenge_cache: dict[str, int | None] = {}
@@ -88,7 +88,11 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
         if state.get("image_url"):
             return "process_activity_with_picture_node"
         return "process_activity_text_only_node"
-
+    
+    def  min_distance_rule_route( state: ActivityState,) -> Literal["save_activity", "end"]:
+        if state.get("meets_minimum_distance_rule", True):
+            return "save_activity"
+        return "end"
     async def process_activity_with_picture_node(state: ActivityState) -> ActivityState:
         last_error: Exception | None = None
         for attempt in range(1, 4):
@@ -173,10 +177,23 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
         history = get_user_activity_history(state["author_id"])
         return {"historic_activities": history}
 
+    def validate_activity_distance_rule(state: ActivityState) -> ActivityState:
+        distance_km = state.get("distance_km")
+        activity_type = state.get("activity_type", "").lower() if state.get("activity_type") else ""
+        activity_rules = _resolve_activity_types(api_manager=get_api_manager(), challenge_id=resolve_challenge_id(state.get("channel_id")))
+        if distance_km is not None and distance_km <= 0:
+            state["meets_minimum_distance_rule"] = False
+        if distance_km is not None and activity_type in activity_rules:
+            min_distance = activity_rules[activity_type].get("min_distance", 0)
+            state["meets_minimum_distance_rule"] = distance_km >= min_distance
+        else:
+            state["meets_minimum_distance_rule"] = True  
+        return state
+    
     async def generate_comment_node(state: ActivityState) -> ActivityState:
         historic_activities = state.get("historic_activities", [])
         comment = await generate_activity_comment(
-            latest_activity=ActivityParams(
+            new_activity=ActivityParams(
                 activity_type=state["activity_type"],
                 distance_km=state["distance_km"],
                 weight_kg=state["weight_kg"],
@@ -186,9 +203,11 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
                 heart_rate_avg=state["heart_rate_avg"],
                 calories=state["calories"],
             ),
-            activities_context=historic_activities,
-            display_name=state["author_display_name"],
+            historic_activities=historic_activities,
+            user_display_name=state["author_display_name"],
+            meets_minimum_distance_rule=state.get("meets_minimum_distance_rule", True),
         )
+        logger.info("Generated activity comment", extra={"comment": comment})
         return {"comment": comment}
 
     def save_activity_to_db_node(state: ActivityState) -> dict[str, Any]:
@@ -210,6 +229,14 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
         )
         saved_activity = save_activity(activity_create)
         comment = state.get("comment", "")
+        logger.info(
+            "Activity saved",
+            extra={
+                "saved_activity_id": getattr(saved_activity, "id", None),
+                "saved_activity_iid": getattr(saved_activity, "iid", None),
+                "total_points": getattr(saved_activity, "total_points", None),
+            },
+        )
         return {
             "comment": comment,
             "status": "processed",
@@ -223,6 +250,7 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
     graph.add_node("process_activity_with_picture_node", process_activity_with_picture_node)
     graph.add_node("process_activity_text_only", process_activity_text_only_node)
     graph.add_node("get_activity_history", get_activity_history_node)
+    graph.add_node("validate_distance_rule", validate_activity_distance_rule)
     graph.add_node("generate_comment", generate_comment_node)
     graph.add_node("save_activity", save_activity_to_db_node)
     
@@ -237,8 +265,22 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
 
     graph.add_edge("process_activity_with_picture_node", "get_activity_history")
     graph.add_edge("process_activity_text_only", "get_activity_history")
-    graph.add_edge("get_activity_history", "generate_comment")
-    graph.add_edge("generate_comment", "save_activity")
+    graph.add_edge("get_activity_history", "validate_distance_rule")
+    graph.add_edge("validate_distance_rule", "generate_comment")
+    graph.add_conditional_edges(
+       "generate_comment",
+       min_distance_rule_route,
+       
+        {
+            "save_activity": "save_activity",
+            "end": END,
+        },
+    )
     graph.add_edge("save_activity", END)
-    
-    return graph.compile()
+    compiled_graph = graph.compile()
+
+    logger.debug("Activity graph mermaid definition\n%s", compiled_graph.get_graph().draw_mermaid())
+    return compiled_graph
+
+
+

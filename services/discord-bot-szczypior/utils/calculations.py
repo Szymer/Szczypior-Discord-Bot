@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from datetime import datetime
@@ -14,10 +15,12 @@ try:
 except ImportError:
 	from services.discord_bot_szczypior.api.api_menager import APIManager  # type: ignore
 
-from bot.config_manager import config_manager
-from bot.constants import ACTIVITY_TYPES
+from libs.shared.constants import ACTIVITY_TYPES, POINTS_BONUSES
 
 from libs.shared.schemas.activity import ActivityCreate
+
+
+logger = logging.getLogger(__name__)
 
 
 ACTIVITY_TYPE_ALIASES: dict[str, str] = {
@@ -93,7 +96,9 @@ def _parse_time_to_minutes(raw_time: Any) -> Optional[int]:
 
 
 def _normalize_points_rules(raw_points_rules: Optional[dict[str, Any]]) -> dict[str, Any]:
-	default_rules = config_manager.get_points_rules()
+	default_rules = POINTS_BONUSES if isinstance(POINTS_BONUSES, dict) else {}
+	default_weight_rules = default_rules.get("weight_bonus", {})
+	default_elevation_rules = default_rules.get("elevation_bonus", {})
 	if not isinstance(raw_points_rules, dict):
 		raw_points_rules = {}
 
@@ -104,21 +109,21 @@ def _normalize_points_rules(raw_points_rules: Optional[dict[str, Any]]) -> dict[
 		"weight_bonus": {
 			"min_weight_kg": _to_float(
 				weight_raw.get("min_weight_kg") if isinstance(weight_raw, dict) else None,
-				_to_float(default_rules["weight_bonus"].get("min_weight_kg", 5), 5),
+				_to_float(default_weight_rules.get("min_weight_kg", 5), 5),
 			),
 			"distance_points_multiplier": _to_float(
 				weight_raw.get("distance_points_multiplier") if isinstance(weight_raw, dict) else None,
-				_to_float(default_rules["weight_bonus"].get("distance_points_multiplier", 1.5), 1.5),
+				_to_float(default_weight_rules.get("distance_points_multiplier", 1.5), 1.5),
 			),
 		},
 		"elevation_bonus": {
 			"meters_step": _to_int(
 				elevation_raw.get("meters_step") if isinstance(elevation_raw, dict) else None,
-				_to_int(default_rules["elevation_bonus"].get("meters_step", 50), 50),
+				_to_int(default_elevation_rules.get("meters_step", 50), 50),
 			),
 			"points_per_step": _to_int(
 				elevation_raw.get("points_per_step") if isinstance(elevation_raw, dict) else None,
-				_to_int(default_rules["elevation_bonus"].get("points_per_step", 500), 500),
+				_to_int(default_elevation_rules.get("points_per_step", 500), 500),
 			),
 		},
 	}
@@ -222,6 +227,15 @@ def calculate_points_breakdown(
 	if total_points < 1:
 		base_points = 1
 		total_points = 1
+
+	logger.info(
+		"Points calculated",
+		extra={
+			"total_points": total_points,
+			"weight_bonus_points": weight_bonus_points,
+			"elevation_bonus_points": elevation_bonus_points,
+		},
+	)
 
 	return {
 		"base_points": base_points,

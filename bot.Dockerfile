@@ -35,4 +35,4 @@ COPY --from=build /app /app
 
 EXPOSE 8080
 
-CMD ["uv", "run", "bot/main.py"]
+CMD ["uv", "run", "run.py"]

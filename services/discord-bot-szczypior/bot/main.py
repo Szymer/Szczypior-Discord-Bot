@@ -72,10 +72,7 @@ def _configure_logging() -> logging.Logger:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
 
-    file_handler = logging.FileHandler("bot.log", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-
-    logging.basicConfig(level=logging.INFO, handlers=[console_handler, file_handler])
+    logging.basicConfig(level=logging.INFO, handlers=[console_handler])
     return logging.getLogger(__name__)
 
 

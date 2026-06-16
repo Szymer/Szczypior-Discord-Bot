@@ -203,7 +203,8 @@ PROGRESS_COMMENT_PROMPT_MESSAGES = [
         "Display name: {display_name}\n"
         "Latest activity: {latest_activity}\n"
         "Activities context: {activities_context}\n\n"
-        "Skoncentruj sie na progresie lub jego braku. Jezeli dane sa mieszane, ocen regularnosc, trend wysilku i jakosc ostatnich wynikow na tle poprzednich."
+        "Meets minimum distance rule: {meets_minimum_distance_rule}\n"
+        "Jeżeli {meets_minimum_distance_rule}  jest False mocno skrytykuj uzytkownika jeżeli True  to : skoncentruj sie na progresie lub jego braku. Jezeli dane sa mieszane, ocen regularnosc, trend wysilku i jakosc ostatnich wynikow na tle poprzednich."
     ),
 ]
 
@@ -242,6 +243,7 @@ ACTIVITY_COMMENT_SYSTEM_PROMPT = (
     "- nie wymyślaj danych, których nie ma w kontekście.\n\n"
 
     "Zasady merytoryczne:\n"
+    "0. Sprawdź, czy aktywność spełnia minimalny dystans.\n"
     "1. Oceniaj tylko na podstawie danych przekazanych w kontekście.\n"
     "2. Najpierw sprawdź, czy historia aktywności pozwala ocenić trend.\n"
     "3. Jeżeli są dane historyczne, porównaj najnowszą aktywność z wcześniejszymi.\n"
@@ -275,7 +277,9 @@ ACTIVITY_COMMENT_HUMAN_PROMPT = (
     "{historic_activities}\n\n"
     "Nazwa użytkownika:\n"
     "{user_display_name}\n\n"
-    "Wygeneruj krótki komentarz motywacyjny zgodnie z wybranym stylem i zasadami systemowymi."
+    "Meets minimum distance rule: {meets_minimum_distance_rule}\n"
+    "Jeżeli {meets_minimum_distance_rule} jest False mocno skrytykuj użytkownika i koniecznie dodaj ze ta aktywność nie ejst brana pod uwage bo nie spełnia zasady minimalnego dystansu, \n"
+    "jeżeli {meets_minimum_distance_rule} True to :Wygeneruj krótki komentarz motywacyjny zgodnie z wybranym stylem i zasadami systemowymi."
 )
 
 def get_message_and_picture_analyze_prompt_messages() -> List[Tuple[str, str]]:
