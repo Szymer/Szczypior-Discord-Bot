@@ -16,6 +16,7 @@ for _path in (_BOT_DIR, _SVC_DIR, _REPO_ROOT):
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
@@ -105,7 +106,7 @@ async def on_ready() -> None:
         return
 
     try:
-        challenges = api_manager.get_active_challenges()
+        challenges = await asyncio.to_thread(api_manager.get_active_challenges)
     except Exception:
         logger.error("Failed to fetch active challenges for startup sync", exc_info=True)
         return
