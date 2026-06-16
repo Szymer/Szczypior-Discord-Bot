@@ -279,7 +279,7 @@ def build_activity_state_graph() -> StateGraph[ActivityState]:
     graph.add_edge("save_activity", END)
     compiled_graph = graph.compile()
 
-    logger.debug("Activity graph mermaid definition\n%s", compiled_graph.get_graph().draw_mermaid())
+    # logger.debug("Activity graph mermaid definition\n%s", compiled_graph.get_graph().draw_mermaid())
     return compiled_graph
 
 
