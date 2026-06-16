@@ -7,7 +7,6 @@ import os
 from typing import Any
 from urllib import error, parse, request
 
-from config_manager import config_manager
 from libs.shared.schemas.activity import (
     ActivityCreate,
     ActivityRead,
@@ -20,11 +19,11 @@ from libs.shared.schemas.event import AirsoftEventRead
 
 
 class APIManagerError(Exception):
-    """Błąd warstwy komunikacji z db-service."""
+    """Blad warstwy komunikacji z db-service."""
 
 
 class APIManagerHTTPError(APIManagerError):
-    """Błąd HTTP zwrócony przez db-service."""
+    """Blad HTTP zwrocony przez db-service."""
 
     def __init__(self, status_code: int, detail: str, url: str):
         self.status_code = status_code
@@ -37,9 +36,12 @@ class APIManager:
     """Klient API dla operacji na db-service."""
 
     def __init__(self, base_url: str | None = None, timeout_seconds: int = 15):
-        configured_base_url = base_url or config_manager.get_db_service_base_url()
+        configured_base_url = base_url or os.getenv("DB_SERVICE_BASE_URL") or os.getenv("API_URL")
+        if not configured_base_url:
+            raise APIManagerError(
+                "Brak DB_SERVICE_BASE_URL (lub API_URL). Ustaw URL db-service w .env."
+            )
         self.api_base_url = self._normalize_api_base_url(configured_base_url)
-        # self.api_base_url = self._normalize_api_base_url('http://localhost:8080')
 
         self.timeout_seconds = timeout_seconds
         self.api_key_header_name = os.getenv("DB_SERVICE_API_KEY_HEADER", "X-API-Key")
@@ -47,7 +49,7 @@ class APIManager:
 
         if not self.api_key:
             raise APIManagerError(
-                "Brak DB_SERVICE_API_KEY. Ustaw API key, aby autoryzować wywołania do db-service."
+                "Brak DB_SERVICE_API_KEY. Ustaw API key, aby autoryzowac wywolania do db-service."
             )
 
     def __enter__(self) -> "APIManager":
@@ -110,14 +112,14 @@ class APIManager:
             elif parsed_error:
                 detail = str(parsed_error)
             else:
-                detail = exc.reason
+                detail = str(exc.reason)
 
             raise APIManagerHTTPError(status_code=exc.code, detail=detail, url=url) from exc
         except (error.URLError, TimeoutError) as exc:
-            raise APIManagerError(f"Błąd połączenia z db-service ({url}): {exc}") from exc
+            raise APIManagerError(f"Blad polaczenia z db-service ({url}): {exc}") from exc
 
     def save_activity(self, payload: ActivityCreate) -> ActivityRead:
-        """Zapisuje nową aktywność przez API db-service."""
+        """Zapisuje nowa aktywnosc przez API db-service."""
         response_data = self._request(
             "POST",
             "/activities",
@@ -126,7 +128,7 @@ class APIManager:
         return ActivityRead.model_validate(response_data)
 
     def get_user_activities(self, discord_id: str, limit: int = 20) -> list[ActivityRead]:
-        """Pobiera historię aktywności użytkownika po `discord_id`."""
+        """Pobiera historie aktywnosci uzytkownika po `discord_id`."""
         response_data = self._request(
             "GET",
             f"/users/{discord_id}/history",
@@ -135,12 +137,12 @@ class APIManager:
         return [ActivityRead.model_validate(item) for item in (response_data or [])]
 
     def get_activity(self, activity_iid: str) -> ActivityRead:
-        """Pobiera pojedynczą aktywność po identyfikatorze `iid`."""
+        """Pobiera pojedyncza aktywnosc po identyfikatorze `iid`."""
         response_data = self._request("GET", f"/activities/{activity_iid}")
         return ActivityRead.model_validate(response_data)
 
     def update_activity(self, activity_iid: str, payload: ActivityUpdate) -> ActivityRead:
-        """Edytuje aktywność przez API db-service."""
+        """Edytuje aktywnosc przez API db-service."""
         response_data = self._request(
             "PATCH",
             f"/activities/{activity_iid}",
@@ -154,7 +156,7 @@ class APIManager:
         return AirsoftEventRead.model_validate(response_data)
 
     def list_events(self, upcoming_only: bool = False) -> list[AirsoftEventRead]:
-        """Pobiera listę wszystkich eventów."""
+        """Pobiera liste wszystkich eventow."""
         response_data = self._request(
             "GET",
             "/events",
@@ -163,17 +165,17 @@ class APIManager:
         return [AirsoftEventRead.model_validate(item) for item in (response_data or [])]
 
     def get_active_events(self) -> list[AirsoftEventRead]:
-        """Pobiera listę aktualnie aktywnych eventów (trwających)."""
+        """Pobiera liste aktualnie aktywnych eventow (trwajacych)."""
         response_data = self._request("GET", "/events/active")
         return [AirsoftEventRead.model_validate(item) for item in (response_data or [])]
 
     def get_rankings(self, limit: int = 10) -> list[UserRankingRead]:
-        """Pobiera ranking użytkowników według punktów."""
+        """Pobiera ranking uzytkownikow wedlug punktow."""
         response_data = self._request("GET", "/rankings", params={"limit": limit})
         return [UserRankingRead.model_validate(item) for item in (response_data or [])]
 
     def get_active_challenges(self) -> list[ChallengeRead]:
-        """Pobiera listę aktualnie aktywnych challenge'y."""
+        """Pobiera liste aktualnie aktywnych challenge'y."""
         response_data = self._request("GET", "/challenges/active")
         return [ChallengeRead.model_validate(item) for item in (response_data or [])]
 
@@ -183,6 +185,18 @@ class APIManager:
         return ChallengeRead.model_validate(response_data)
 
     def get_activity_rules(self, challenge_id: int) -> list[ActivityRuleRead]:
-        """Pobiera reguły aktywności dla danego challenge'u."""
+        """Pobiera reguly aktywnosci dla danego challenge'u."""
         response_data = self._request("GET", f"/challenges/{challenge_id}/activity-rules")
         return [ActivityRuleRead.model_validate(item) for item in (response_data or [])]
+
+
+def get_user_activity_history(discord_id: str, limit: int = 20) -> list[ActivityRead]:
+    """Backward-compatible helper used by AI graph modules."""
+    with APIManager() as api:
+        return api.get_user_activities(discord_id, limit=limit)
+
+
+def save_activity(payload: ActivityCreate) -> ActivityRead:
+    """Backward-compatible helper used by AI graph modules."""
+    with APIManager() as api:
+        return api.save_activity(payload)

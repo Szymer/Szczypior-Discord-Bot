@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import discord
 
-from api_menager import APIManager, APIManagerError, APIManagerHTTPError
+from api.api_menager import APIManager, APIManagerError, APIManagerHTTPError  # pyright: ignore[reportMissingImports]
 from config_manager import config_manager
 from constants import ACTIVITY_TYPES
 from exceptions import (
@@ -19,6 +19,8 @@ from exceptions import (
 )
 from libs.shared.schemas.challenge import ChallengeRead
 from utils import get_display_name, parse_distance
+
+from ai.chains import analyze_message_and_picture
 
 logger = logging.getLogger(__name__)
 
@@ -451,7 +453,8 @@ class BotOrchestrator:
         self,
         text: Optional[str] = None,
         image_url: Optional[str] = None,
-        user_history: Optional[List[Any]] = None
+        user_history: Optional[List[Any]] = None,   
+        message: Optional[discord.Message] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Unified method for analyzing content (text and/or image) for activity data.
@@ -530,11 +533,16 @@ class BotOrchestrator:
                     user_history=user_history_text
                 )
                 
-                analysis_result = await self._analyze_image_with_failover(
-                    image_url,
-                    user_prompt,
-                    system_prompt,
+                analysis_result = await analyze_message_and_picture(
+                    user_message=text or "",
+                    picture_url=image_url,
+                    activities_context=user_history_text,
                 )
+                # analysis_result = await self._analyze_image_with_failover(
+                #     image_url,
+                #     user_prompt,
+                #     system_prompt,
+                # )
 
                 if not analysis_result:
                     logger.info("Image analysis failed on all configured LLM clients")
@@ -1004,6 +1012,7 @@ class BotOrchestrator:
             
             # Use unified analysis method
             analysis = await self.analyze_content(
+                message=message,
                 text=message.content,
                 image_url=image_url,
                 user_history=user_history
@@ -1746,6 +1755,7 @@ class BotOrchestrator:
         self, current_activity: Dict[str, Any], previous_activities: List[Dict[str, Any]]
     ) -> str:
         """Buduje prompt do wygenerowania komentarza motywacyjnego."""
+        #to zrobi graph 
         logger.info(
             "🔍 DEBUG: Building motivational prompt",
             extra={
