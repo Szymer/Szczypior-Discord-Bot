@@ -136,15 +136,22 @@ async def ping(ctx: commands.Context) -> None:
     await ctx.send(f"Pong! Latencja: {round(bot.latency * 1000)}ms")
 
 
-def main() -> None:
-    """Glowna funkcja uruchamiajaca bota."""
+async def start() -> None:
+    """Uruchamia bota Discord w istniejącej pętli asyncio."""
     register_future_commands()
 
     token = os.getenv("DISCORD_TOKEN")
     if not token:
-        raise ValueError("Brak tokena Discord! Ustaw DISCORD_TOKEN w pliku .env")
+        raise ValueError("Brak tokena Discord! Ustaw DISCORD_TOKEN w zmiennych środowiskowych")
 
-    bot.run(token)
+    await bot.start(token)
+
+
+def main() -> None:
+    """Lokalne uruchomienie bota poza Cloud Run."""
+    import asyncio
+
+    asyncio.run(start())
 
 
 if __name__ == "__main__":
