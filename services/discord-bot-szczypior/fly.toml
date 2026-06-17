@@ -1,0 +1,38 @@
+# fly.toml dla szczypior-discord-bot
+app = 'szczypior-discord-bot'
+primary_region = 'fra'
+
+[build]
+  dockerfile = "../../infrastructure/docker/discord-bot/Dockerfile"
+
+# Bot Discord używa stałego połączenia WebSocket – maszyna musi działać non-stop.
+[machines]
+  auto_stop = false
+
+[checks]
+  [checks.health]
+    type = "http"
+    grace_period = "30s"
+    interval = "20s"
+    method = "GET"
+    path = "/health"
+    timeout = "10s"
+    port = 8080
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+
+[env]
+  PORT = "8080"
+  DB_SERVICE_API_KEY_HEADER = "X-API-Key"
+
+# Sekrety ustawiane przez: ./deploy.sh
+# Lub ręcznie: fly secrets set KEY=value -a szczypior-discord-bot
+#
+# Wymagane sekrety:
+# - DISCORD_TOKEN
+# - GEMINI_API_KEY
+# - OPENAI_API_KEY
+# - DB_SERVICE_BASE_URL
+# - DB_SERVICE_API_KEY

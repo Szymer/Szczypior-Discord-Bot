@@ -88,6 +88,29 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 message_handler: Any = DiscordMessageHandler(ai_processor=ModuleAIMessageProcessor(), bot=bot)
 
 
+def _load_monitored_channel_ids() -> frozenset[int]:
+    """Wczytuje MONITORED_CHANNEL_IDS z env jako pojedyncza wartosc lub liste rozdzielona przecinkami."""
+    raw = os.getenv("MONITORED_CHANNEL_IDS", "").strip()
+    if not raw:
+        return frozenset()
+    ids: set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            try:
+                ids.add(int(part))
+            except ValueError:
+                logger.warning("Invalid channel ID in MONITORED_CHANNEL_IDS: %r", part)
+    return frozenset(ids)
+
+
+_MONITORED_CHANNEL_IDS: frozenset[int] = _load_monitored_channel_ids()
+if _MONITORED_CHANNEL_IDS:
+    logger.info("Monitoring channels", extra={"channel_ids": sorted(_MONITORED_CHANNEL_IDS)})
+else:
+    logger.info("MONITORED_CHANNEL_IDS not set — processing messages from all channels")
+
+
 def register_future_commands() -> None:
     """Placeholder pod przyszle komendy bota."""
 
@@ -126,6 +149,9 @@ async def on_message(message: discord.Message) -> None:
     await bot.process_commands(message)
 
     if message.content.startswith("!"):
+        return
+
+    if _MONITORED_CHANNEL_IDS and message.channel.id not in _MONITORED_CHANNEL_IDS:
         return
 
     await message_handler.handle(message)

@@ -1,10 +1,14 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 venv/
+venv/**
+.venv/
+**/.venv/
 env/
 ENV/
 *.egg-info/
@@ -28,6 +32,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+bot.log
 
 # Dokumentacja
 *.md
@@ -36,11 +41,15 @@ logs/
 # Testy
 tests/
 .pytest_cache/
+.ruff_cache/
+htmlcov/
 
 # Development
 .env
 .env.local
 requirements-dev.txt
+fly.toml.tmp
+fly.toml.bot.tmp
 
 # Frontend artifacts
 **/node_modules/
